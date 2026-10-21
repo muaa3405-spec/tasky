@@ -1479,13 +1479,6 @@ public partial class MainWindow : System.Windows.Window
         BuildStatsUI();
     }
 
-    // ── Meetings page stubs (page is hidden; handlers kept to satisfy XAML compiler) ──
-    private void SetMeetingsState_Stub() { }
-    private async void MeetingsSignIn_Click(object sender, RoutedEventArgs e)  { await System.Threading.Tasks.Task.CompletedTask; }
-    private async void MeetingsSignOut_Click(object sender, RoutedEventArgs e) { await System.Threading.Tasks.Task.CompletedTask; }
-    private void MeetingsOpenAzurePortal_Click(object sender, RoutedEventArgs e) { }
-    private async void MeetingsSaveClientId_Click(object sender, RoutedEventArgs e) { await System.Threading.Tasks.Task.CompletedTask; }
-
     // ── Week navigation (Stats page) ─────────────────────────────────────────
 
     private void PrevWeek_Click(object sender, RoutedEventArgs e)

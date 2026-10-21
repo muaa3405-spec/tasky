@@ -12,7 +12,6 @@ public class AppSettings
     public int     NotifAutoDismissSecs  { get; set; } = 30;
     public bool    ShowCompletionPopup      { get; set; } = true;
     public bool    SaveScreenshotToDesktop { get; set; } = true;
-    public string  MsClientId             { get; set; } = string.Empty;
 }
 
 /// <summary>Plays a notification sound by tag using Windows Media WAV files.</summary>

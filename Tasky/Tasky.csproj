@@ -28,10 +28,6 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <!-- Windows Community Toolkit – Win32 toast notification helper -->
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
-    <!-- MSAL – Microsoft identity / OAuth2 for Teams/Graph calendar -->
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.66.2" />
-    <!-- DPAPI – encrypts the saved sign-in token for the current Windows user -->
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
