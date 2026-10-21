@@ -10,8 +10,7 @@ public static class CrashLog
 {
     private static readonly object Gate = new();
 
-    public static string Folder { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tasky", "logs");
+    public static string Folder => AppPaths.LogsFolder;
 
     public static string CurrentFile => Path.Combine(Folder, $"tasky-{DateTime.Now:yyyyMMdd}.log");
 

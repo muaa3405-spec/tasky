@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Data.Sqlite;
 using Tasky.Models;
+using Tasky.Services.Migration;
 
 namespace Tasky.Services;
 
@@ -12,12 +13,10 @@ public class DatabaseService
 
     public DatabaseService()
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var folder = Path.Combine(appData, "Tasky");
-        Directory.CreateDirectory(folder);
-        _dbPath = Path.Combine(folder, "tasky.db");
+        Directory.CreateDirectory(AppPaths.DataFolder);
+        _dbPath = AppPaths.DatabaseFile;
         _connectionString = $"Data Source={_dbPath}";
-        AttachmentsRoot = Path.Combine(folder, "Attachments");
+        AttachmentsRoot = AppPaths.AttachmentsFolder;
         Directory.CreateDirectory(AttachmentsRoot);
     }
 
@@ -119,6 +118,7 @@ public class DatabaseService
         try { Execute(conn, "ALTER TABLE Notes ADD COLUMN Tags TEXT NOT NULL DEFAULT ''"); } catch { }
 
         DeleteOrphanedChildRows(conn);
+        RepairAttachmentPaths(conn);
     }
 
     // ── MissedNotifications ────────────────────────────────────────────────
@@ -606,6 +606,73 @@ public class DatabaseService
     }
 
     // Attachments
+
+    /// <summary>
+    /// Attachment rows store absolute paths. When data arrives from another computer
+    /// (or the Windows user name changed) those paths point nowhere; re-point each one
+    /// at the same file inside this computer's Attachments\&lt;task id&gt;\ folder.
+    /// </summary>
+    private void RepairAttachmentPaths(SqliteConnection conn)
+    {
+        var fixes = new List<(int Id, string Path)>();
+        using (var read = conn.CreateCommand())
+        {
+            read.CommandText = "SELECT Id, TaskId, FilePath FROM Attachments";
+            using var r = read.ExecuteReader();
+            while (r.Read())
+            {
+                var stored = r.GetString(2);
+                var local  = Path.Combine(AttachmentsRoot, r.GetInt32(1).ToString(), Path.GetFileName(stored));
+                bool alreadyLocal = string.Equals(Path.GetFullPath(stored), Path.GetFullPath(local),
+                                                  StringComparison.OrdinalIgnoreCase);
+                if (!alreadyLocal && File.Exists(local)) fixes.Add((r.GetInt32(0), local));
+            }
+        }
+        if (fixes.Count == 0) return;
+
+        using var tx = conn.BeginTransaction();
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "UPDATE Attachments SET FilePath = $path WHERE Id = $id";
+        var pPath = cmd.Parameters.Add("$path", SqliteType.Text);
+        var pId   = cmd.Parameters.Add("$id",   SqliteType.Integer);
+        foreach (var (id, path) in fixes) { pId.Value = id; pPath.Value = path; cmd.ExecuteNonQuery(); }
+        tx.Commit();
+    }
+
+    /// <summary>
+    /// Writes a consistent copy of the whole database to <paramref name="destinationFile"/>
+    /// while Tasky keeps running (SQLite VACUUM INTO also folds in the WAL journal).
+    /// </summary>
+    public void SnapshotTo(string destinationFile)
+    {
+        if (File.Exists(destinationFile)) File.Delete(destinationFile);
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "VACUUM INTO $dest";
+        cmd.Parameters.AddWithValue("$dest", destinationFile);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Row counts shown to the user before exporting or importing.</summary>
+    public static MigrationCounts CountRecords(string databaseFile)
+    {
+        using var conn = new SqliteConnection($"Data Source={databaseFile};Mode=ReadOnly;Pooling=False");
+        conn.Open();
+        int Count(string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+        return new MigrationCounts(
+            OpenTasks:      Count("SELECT COUNT(*) FROM Tasks WHERE IsCompleted = 0 AND DeletedAt IS NULL"),
+            CompletedTasks: Count("SELECT COUNT(*) FROM Tasks WHERE IsCompleted = 1 AND DeletedAt IS NULL"),
+            Notes:          Count("SELECT COUNT(*) FROM Notes"),
+            Groups:         Count("SELECT COUNT(*) FROM Groups"),
+            Reminders:      Count("SELECT COUNT(*) FROM Reminders"),
+            Attachments:    Count("SELECT COUNT(*) FROM Attachments"));
+    }
 
     public List<TaskAttachment> GetAttachments(int taskId)
     {

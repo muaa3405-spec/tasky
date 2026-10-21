@@ -152,7 +152,19 @@ All task data is stored in:
 %APPDATA%\Tasky\tasky.db      (SQLite)
 ```
 
-Back this file up to preserve your tasks across reinstalls.
+To move everything to another PC, use **Settings → Migrate to another computer**
+(see the README).
+
+### Testing with sandbox data
+
+Set the `TASKY_DATA_ROOT` environment variable to an empty folder to run Tasky
+against throw-away data instead of your own. The sandboxed copy uses its own
+single-instance lock, so it can run next to your normal Tasky:
+
+```powershell
+$env:TASKY_DATA_ROOT = "$env:TEMP\tasky-sandbox"
+dotnet run --project Tasky/Tasky.csproj
+```
 
 ---
 

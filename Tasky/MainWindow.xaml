@@ -1545,6 +1545,30 @@
                         </Grid>
                     </Border>
 
+                    <!-- Migrate to another computer (encrypted export / import) -->
+                    <Border Style="{StaticResource TaskCard}" Padding="14,11" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="&#x1F4BB;" FontSize="16"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Migrate to another computer" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                                <TextBlock Text="Export everything to one password-protected file, or import it on a new PC"
+                                           Style="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,1,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource PrimaryButton}"
+                                    Padding="12,6" Click="Migrate_Click"
+                                    VerticalAlignment="Center" Margin="10,0,0,0">
+                                <TextBlock Text="Open" FontSize="12"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
                 </StackPanel>
                 </ScrollViewer>
             </Grid>
