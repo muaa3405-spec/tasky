@@ -1,0 +1,31 @@
+# Build output
+bin/
+obj/
+[Bb]uild/
+*.wpftmp.csproj
+
+# Visual Studio / Rider / VS Code local state
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.pubxml.user
+
+# Local AI-assistant settings (machine-specific paths and permissions)
+.claude/settings.local.json
+
+# Installer output — publish binaries as GitHub Releases, not in the repo
+installer/Output/
+
+# Never commit user data, logs or secrets
+*.db
+*.db-shm
+*.db-wal
+*.log
+ms_token.bin
+settings.json
+appsettings.*.json
+*.pfx
+*.snk
+.env

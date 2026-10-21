@@ -1,0 +1,175 @@
+<p align="center">
+  <img src="Tasky/Assets/tasky-logo.png" alt="Tasky logo" width="96" height="96">
+</p>
+
+<h1 align="center">Tasky</h1>
+
+<p align="center">
+  <strong>Your tasks. Your time. Your computer. Nobody else's business.</strong><br>
+  A private, offline task manager and time tracker for Windows. No account, no cloud, no internet required.
+</p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6">
+  <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-22C55E">
+  <img alt="Offline" src="https://img.shields.io/badge/works-100%25%20offline-F59E0B">
+</p>
+
+---
+
+## What is Tasky?
+
+Tasky is a small desktop app that sits in your system tray and keeps track of
+**everything you want to get done**: work projects, personal errands, habits,
+goals. It also shows **where your time actually goes**.
+
+It is built around one idea: **your to-do list is personal.** It shouldn't
+live on someone else's server, need a subscription, or stop working when the
+Wi-Fi drops.
+
+## Why Tasky exists
+
+Most task apps want you to sign up, sync to their cloud and pay monthly, and
+they hold your data. Tasky takes the opposite approach:
+
+- 🔒 **Private by design.** Everything is stored in a local database on your own PC.
+  No telemetry, no analytics, no servers.
+- 📴 **No internet needed.** It works on a plane, behind a firewall, anywhere.
+  (The only optional online feature is reading your Outlook calendar, and it is off
+  until you set it up yourself.)
+- 🧍 **Not just for projects.** Use it for your own life: daily routines,
+  reminders, learning goals, side projects, chores.
+- 📈 **For personal improvement.** Tasky tracks time spent and tasks completed so you
+  can see your own progress and work habits. Only you see the reports.
+- ⚡ **Simple and fast.** One click (or one shortcut) adds a task. No setup, no
+  tutorial, no clutter.
+
+## Features
+
+### ✅ Tasks
+- **One-click add** from the main window, or **Win + Shift + T** from anywhere
+- Title, description, due date and **task numbers** (`#012`) for quick reference
+- **Groups** with colours (Work, Personal, Health… whatever you like) and one-click group filters
+- **Today / This Week / All** views, plus instant search by title, number or description
+- **Recurring tasks**: daily, weekly or monthly; the next one is created when you finish the current one
+- **Drag and drop** to reorder your list
+- **Recycle bin**: deleted tasks can be restored for 30 days
+- Overdue tasks are highlighted in red, so nothing slips quietly
+
+### ⏱ Time tracking
+- **One toggle** starts the timer on a task, and pause/resume is one click
+- **Pauses automatically** when you are idle for 5 minutes, lock your PC, put it to
+  sleep, shut down or quit, so your reports stay honest
+- Resumes when you come back from idle or unlock
+- Add time by hand for tasks you forgot to track
+- A **floating mini-widget** shows the running timer while you work in other apps
+
+### 🔔 Reminders
+- One-time, daily, weekly (pick the weekday) or monthly (pick the day) reminders, with an optional end date
+- Quick **"remind me in 5 / 10 / 30 / 60 minutes"** from any task
+- Themed pop-up notifications with **snooze**, custom accent colour and notification sound
+- A **missed-notifications inbox**, so reminders that fired while you were away aren't lost
+- Reminders and snoozes survive restarts
+
+### 📝 Notes
+- Quick notes with **tags** and full-text search, for ideas, how-tos and snippets
+- One-click copy of a note's text
+
+### 📎 Attachments
+- Paste screenshots with **Ctrl + V**, drag and drop files, or pick them from disk
+- Built-in image viewer with next/previous; other files open in their default app
+
+### 📊 Personal progress reports
+- Tasks completed **today, this week and all time**
+- **Week-by-week charts** of tasks finished and time spent (browse back through past weeks)
+- **Your busiest hours** of the day and an average **weekly time pattern**
+- **Top tasks by time**, to see where your hours really go
+- **Meeting hours**, detected automatically when your microphone or camera is in use
+- **App usage**, showing which apps you spend your day in
+
+### 🎉 Small things that make it nice
+- A celebration with confetti when you finish a task, plus a shareable "completed" banner
+  (saved to your Desktop and copied to the clipboard)
+- **Dark and light themes** that follow your Windows setting automatically
+- Lives quietly in the **system tray**, and opening it again just brings the window forward
+- Optional: see your **Outlook / Teams meetings** (Microsoft sign-in, see below)
+
+## Getting started
+
+### Requirements
+- Windows 10 version 2004 (build 19041) or later, 64-bit
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build from source
+
+### Build and run
+
+```bash
+git clone https://github.com/muaa3405-spec/tasky.git
+cd tasky
+dotnet run --project Tasky/Tasky.csproj
+```
+
+That's it. No accounts, keys or configuration. On first start Tasky creates its own
+empty database.
+
+To make a self-contained build you can copy to any Windows PC (no .NET install needed there):
+
+```bash
+dotnet publish Tasky/Tasky.csproj -c Release
+```
+
+See [BUILD.md](BUILD.md) for building the installer with Inno Setup.
+
+## Where your data lives
+
+Everything stays inside your Windows user profile. Nothing is ever uploaded.
+
+| What | Location |
+|------|----------|
+| Tasks, notes, reminders, reports (SQLite) | `%AppData%\Tasky\tasky.db` |
+| Attachments | `%AppData%\Tasky\Attachments\<task id>\` |
+| Settings | `%AppData%\Tasky\settings.json` |
+| Microsoft sign-in token (only if you use Meetings) | `%AppData%\Tasky\ms_token.bin`, encrypted for your Windows user (DPAPI) |
+| Error logs | `%LocalAppData%\Tasky\logs\` |
+
+These folders are readable only by your Windows account (and administrators).
+**Back up or move** Tasky by copying `%AppData%\Tasky`. **Remove all data** by deleting it.
+
+### What gets recorded on your PC
+
+To power the reports, Tasky also keeps two local logs:
+
+- **Meeting detection** records when an app uses your microphone or camera (start and
+  end time only), so meeting hours show up in your stats.
+- **App usage** records which app is in the foreground (by app name, not what's
+  inside the window) and for how long.
+
+Both stay in the local database above and never leave your computer.
+
+## Optional: Outlook / Teams meetings
+
+The Meetings page can read your calendar through Microsoft Graph. Tasky ships with
+**no client ID or secret**. To use it, register your own free app:
+
+1. Go to <https://entra.microsoft.com> → **App registrations** → **New registration**.
+2. Supported accounts: *Personal Microsoft accounts*.
+3. Redirect URI: platform **Public client / native**, value `http://localhost`.
+4. Under **API permissions**, add the delegated permission `Calendars.Read`.
+5. Open Tasky's **Meetings** page and paste the **Application (client) ID** into the setup card.
+
+It is a public client, so there is no secret to keep safe.
+
+## Contributing
+
+Ideas, bug reports and pull requests are welcome.
+
+1. Fork the repo and create a branch from `main`.
+2. Keep pull requests focused; one fix or feature each.
+3. Open a pull request. Every change to `main` is reviewed by the maintainer before it is merged.
+
+Please don't commit build output, your database or personal settings
+(`.gitignore` already excludes them).
+
+## License
+
+[MIT](LICENSE) © 2026 Muhammad Aadil

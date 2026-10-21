@@ -1,0 +1,76 @@
+<Window x:Class="Tasky.Dialogs.NoteDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Note"
+        Background="{DynamicResource AppBackground}"
+        Width="500" SizeToContent="Height"
+        MinHeight="260"
+        WindowStyle="ToolWindow"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False">
+
+    <Border Style="{StaticResource DialogFrame}">
+    <!-- Content scrolls; footer stays pinned at the bottom -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="24,20,24,0">
+    <StackPanel>
+
+        <!-- Title -->
+        <TextBlock Text="TITLE" Style="{StaticResource LabelText}"/>
+        <TextBox x:Name="TitleBox" Style="{StaticResource InputBox}"
+                 Tag="Note title…"
+                 Margin="0,0,0,16"
+                 TextChanged="Field_Changed"/>
+
+        <!-- Description label + copy icon aligned -->
+        <Grid Margin="0,0,0,4">
+            <TextBlock Text="DESCRIPTION" Style="{StaticResource LabelText}"
+                       VerticalAlignment="Center"/>
+            <!-- Copy icon — top-right of the label row -->
+            <Button x:Name="CopyBtn" HorizontalAlignment="Right"
+                    Style="{StaticResource IconButton}"
+                    ToolTip="Copy description to clipboard"
+                    Click="CopyDesc_Click" Padding="4">
+                <TextBlock Text="📋" FontSize="14"
+                           Foreground="{DynamicResource TextSecondary}"/>
+            </Button>
+        </Grid>
+
+        <!-- Editable description (always open) -->
+        <TextBox x:Name="DescBox" Style="{StaticResource InputBox}"
+                 Tag="Note description…"
+                 MinHeight="120" MaxHeight="380"
+                 TextWrapping="Wrap" AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto"
+                 Margin="0,0,0,20"
+                 TextChanged="Field_Changed"/>
+
+        <!-- Tags -->
+        <TextBlock Text="SEARCH TERMS / TAGS" Style="{StaticResource LabelText}" Margin="0,0,0,4"/>
+        <TextBox x:Name="TagsBox" Style="{StaticResource InputBox}"
+                 Tag="Comma-separated tags, e.g. iphone, bluetooth, settings"
+                 Margin="0,0,0,20"
+                 TextChanged="Field_Changed"/>
+
+    </StackPanel>
+    </ScrollViewer>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="24,0,24,20">
+            <Button Content="Close" Style="{StaticResource SecondaryButton}"
+                    Padding="14,8" Margin="0,0,10,0" Click="Close_Click"/>
+            <Button x:Name="SaveBtn" Content="Save Changes"
+                    Style="{StaticResource PrimaryButton}"
+                    Padding="18,8" IsEnabled="False"
+                    Click="Save_Click"/>
+        </StackPanel>
+
+    </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,98 @@
+<Window x:Class="Tasky.Dialogs.ManageGroupsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manage Groups"
+        Background="{DynamicResource AppBackground}"
+        Width="400" Height="560"
+        MinHeight="380"
+        WindowStyle="ToolWindow"
+        ResizeMode="CanResizeWithGrip"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <!-- Grid: title + form are fixed at top, groups list fills middle, close button always at bottom -->
+    <Grid Margin="20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- title -->
+            <RowDefinition Height="Auto"/>   <!-- add-group form -->
+            <RowDefinition Height="Auto"/>   <!-- GROUPS label -->
+            <RowDefinition Height="*"/>      <!-- groups list — stretches to fill -->
+            <RowDefinition Height="Auto"/>   <!-- empty label -->
+            <RowDefinition Height="Auto"/>   <!-- close button -->
+        </Grid.RowDefinitions>
+
+        <!-- Title -->
+        <TextBlock Grid.Row="0" Text="Manage Groups" FontSize="16" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,16"/>
+
+        <!-- Add new group form -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                CornerRadius="8" Padding="12,12" Margin="0,0,0,14">
+            <StackPanel>
+                <TextBlock Text="NEW GROUP" Style="{StaticResource LabelText}" Margin="0,0,0,8"/>
+                <TextBox x:Name="GroupNameBox" Style="{StaticResource InputBox}"
+                         Tag="Group name…" Margin="0,0,0,10"
+                         KeyDown="GroupName_KeyDown"/>
+                <TextBlock Text="COLOUR" Style="{StaticResource LabelText}" Margin="0,0,0,6"/>
+                <WrapPanel x:Name="SwatchPanel" Margin="0,0,0,10"/>
+                <Button Style="{StaticResource PrimaryButton}"
+                        HorizontalAlignment="Right" Padding="18,8"
+                        Content="Add Group" Click="AddGroup_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Groups section label -->
+        <TextBlock Grid.Row="2" Text="GROUPS"
+                   Style="{StaticResource LabelText}" Margin="0,0,0,6"/>
+
+        <!-- Groups list — fills remaining height, scrolls internally -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="GroupsList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource CardBackground}"
+                                BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                                CornerRadius="6" Padding="10,8" Margin="0,0,0,5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="14" Height="14" CornerRadius="7"
+                                        Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <Border.Background>
+                                        <SolidColorBrush Color="{Binding Color}"/>
+                                    </Border.Background>
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="2" Style="{StaticResource IconButton}"
+                                        Tag="{Binding Id}" Click="DeleteGroup_Click">
+                                    <TextBlock Text="🗑" FontSize="13" Foreground="#F87171"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Empty state -->
+        <TextBlock Grid.Row="4" x:Name="EmptyLabel"
+                   Text="No groups yet — add one above."
+                   FontSize="12" Foreground="{DynamicResource TextSecondary}"
+                   HorizontalAlignment="Center" Margin="0,8,0,0"
+                   Visibility="Collapsed"/>
+
+        <!-- Close button — always visible, pinned to bottom -->
+        <Button Grid.Row="5" Content="Close"
+                Style="{StaticResource SecondaryButton}"
+                HorizontalAlignment="Right" Margin="0,14,0,0"
+                Padding="18,8" Click="Done_Click"/>
+    </Grid>
+</Window>

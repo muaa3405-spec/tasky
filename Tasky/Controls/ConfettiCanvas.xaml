@@ -1,0 +1,5 @@
+<Canvas x:Class="Tasky.Controls.ConfettiCanvas"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        IsHitTestVisible="False"
+        Background="Transparent"/>
