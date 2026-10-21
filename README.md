@@ -35,9 +35,8 @@ they hold your data. Tasky takes the opposite approach:
 
 - 🔒 **Private by design.** Everything is stored in a local database on your own PC.
   No telemetry, no analytics, no servers.
-- 📴 **No internet needed.** It works on a plane, behind a firewall, anywhere.
-  (The only optional online feature is reading your Outlook calendar, and it is off
-  until you set it up yourself.)
+- 📴 **No internet needed.** Tasky never connects to the internet. It works on a
+  plane, behind a firewall, anywhere.
 - 🧍 **Not just for projects.** Use it for your own life: daily routines,
   reminders, learning goals, side projects, chores.
 - 📈 **For personal improvement.** Tasky tracks time spent and tasks completed so you
@@ -85,7 +84,9 @@ they hold your data. Tasky takes the opposite approach:
 - **Week-by-week charts** of tasks finished and time spent (browse back through past weeks)
 - **Your busiest hours** of the day and an average **weekly time pattern**
 - **Top tasks by time**, to see where your hours really go
-- **Meeting hours**, detected automatically when your microphone or camera is in use
+- **Meeting hours**, detected automatically when a calling app (Teams, Zoom, Skype,
+  Webex, Slack, Discord, Google Meet…) is actively using your microphone or camera.
+  No calendar access or sign-in needed.
 - **App usage**, showing which apps you spend your day in
 
 ### 🎉 Small things that make it nice
@@ -93,7 +94,6 @@ they hold your data. Tasky takes the opposite approach:
   (saved to your Desktop and copied to the clipboard)
 - **Dark and light themes** that follow your Windows setting automatically
 - Lives quietly in the **system tray**, and opening it again just brings the window forward
-- Optional: see your **Outlook / Teams meetings** (Microsoft sign-in, see below)
 
 ## Getting started
 
@@ -129,7 +129,6 @@ Everything stays inside your Windows user profile. Nothing is ever uploaded.
 | Tasks, notes, reminders, reports (SQLite) | `%AppData%\Tasky\tasky.db` |
 | Attachments | `%AppData%\Tasky\Attachments\<task id>\` |
 | Settings | `%AppData%\Tasky\settings.json` |
-| Microsoft sign-in token (only if you use Meetings) | `%AppData%\Tasky\ms_token.bin`, encrypted for your Windows user (DPAPI) |
 | Error logs | `%LocalAppData%\Tasky\logs\` |
 
 These folders are readable only by your Windows account (and administrators).
@@ -139,25 +138,13 @@ These folders are readable only by your Windows account (and administrators).
 
 To power the reports, Tasky also keeps two local logs:
 
-- **Meeting detection** records when an app uses your microphone or camera (start and
-  end time only), so meeting hours show up in your stats.
+- **Meeting detection** checks every 30 seconds whether a calling app is actively
+  using your microphone or camera, and records only the start and end time of each
+  meeting. It never records audio or video.
 - **App usage** records which app is in the foreground (by app name, not what's
   inside the window) and for how long.
 
 Both stay in the local database above and never leave your computer.
-
-## Optional: Outlook / Teams meetings
-
-The Meetings page can read your calendar through Microsoft Graph. Tasky ships with
-**no client ID or secret**. To use it, register your own free app:
-
-1. Go to <https://entra.microsoft.com> → **App registrations** → **New registration**.
-2. Supported accounts: *Personal Microsoft accounts*.
-3. Redirect URI: platform **Public client / native**, value `http://localhost`.
-4. Under **API permissions**, add the delegated permission `Calendars.Read`.
-5. Open Tasky's **Meetings** page and paste the **Application (client) ID** into the setup card.
-
-It is a public client, so there is no secret to keep safe.
 
 ## Contributing
 

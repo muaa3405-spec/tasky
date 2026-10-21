@@ -23,7 +23,6 @@ installer/Output/
 *.db-shm
 *.db-wal
 *.log
-ms_token.bin
 settings.json
 appsettings.*.json
 *.pfx
