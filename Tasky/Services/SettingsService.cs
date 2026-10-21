@@ -54,9 +54,7 @@ public static class SoundPlayer
 
 public class SettingsService
 {
-    private static readonly string _path = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Tasky", "settings.json");
+    private static string _path => AppPaths.SettingsFile;
 
     private AppSettings _settings = new();
     public AppSettings Current => _settings;

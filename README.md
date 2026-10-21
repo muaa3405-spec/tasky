@@ -89,6 +89,14 @@ they hold your data. Tasky takes the opposite approach:
   No calendar access or sign-in needed.
 - **App usage**, showing which apps you spend your day in
 
+### 💻 Migrate to another computer
+- Move **everything** to a new PC in **one password-protected file**: open and completed
+  tasks, groups, notes, reminders, attachments, reports history, recycle bin and settings
+- The file is **encrypted with your password** (AES-256), so it is safe on a USB stick or shared drive
+- On the new PC, pick the file, enter the password, and Tasky restarts with all your data,
+  as if you had never switched computers
+- No cloud, no account: the file goes wherever *you* put it
+
 ### 🎉 Small things that make it nice
 - A celebration with confetti when you finish a task, plus a shareable "completed" banner
   (saved to your Desktop and copied to the clipboard)
@@ -130,9 +138,10 @@ Everything stays inside your Windows user profile. Nothing is ever uploaded.
 | Attachments | `%AppData%\Tasky\Attachments\<task id>\` |
 | Settings | `%AppData%\Tasky\settings.json` |
 | Error logs | `%LocalAppData%\Tasky\logs\` |
+| Safety copy made before an import | `%LocalAppData%\Tasky\before-import\` |
 
 These folders are readable only by your Windows account (and administrators).
-**Back up or move** Tasky by copying `%AppData%\Tasky`. **Remove all data** by deleting it.
+**Remove all data** by deleting `%AppData%\Tasky`.
 
 ### What gets recorded on your PC
 
@@ -145,6 +154,23 @@ To power the reports, Tasky also keeps two local logs:
   inside the window) and for how long.
 
 Both stay in the local database above and never leave your computer.
+
+## Moving to a new computer
+
+1. On the old PC: **Settings → Migrate to another computer → Open → Export from this computer**.
+2. Create a password (at least 8 characters) and choose where to save the file
+   (for example a USB stick). It is named like `Tasky-migration-2026-10-21.taskymigration`.
+3. Install Tasky on the new PC and open **Settings → Migrate to another computer → Import on this computer**.
+4. Pick the file, enter the password, review what's inside and click **Import and restart Tasky**.
+
+Good to know:
+
+- **The password can't be recovered.** The file is encrypted with it (AES-256-GCM, key
+  derived with PBKDF2-SHA256, 600,000 rounds), and nothing about the password is stored.
+  A wrong password or a damaged or edited file is refused.
+- **Importing replaces the data on that PC.** Whatever Tasky had there before is kept as a
+  safety copy in `%LocalAppData%\Tasky\before-import\`.
+- Attachments keep working even if your Windows user name is different on the new PC.
 
 ## Contributing
 

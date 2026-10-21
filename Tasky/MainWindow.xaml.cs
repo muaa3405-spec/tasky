@@ -1290,6 +1290,13 @@ public partial class MainWindow : System.Windows.Window
         if (ShowModalDialog(dlg) == true) { Vm.PermanentlyDeleteTask(vm); RefreshTrashList(); }
     }
 
+    private void Migrate_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.Database is null) return;
+        var dlg = new MigrateDialog(new Services.Migration.MigrationService(App.Database)) { Owner = this };
+        ShowModalDialog(dlg);
+    }
+
     private void ClearMeetingHistory_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new ConfirmDialog("Clear Meeting History",

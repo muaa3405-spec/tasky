@@ -9,8 +9,17 @@ namespace Tasky.Services;
 /// </summary>
 public sealed class SingleInstanceService : IDisposable
 {
-    private const string MutexName       = "Tasky_SingleInstance_Mutex_v1";
-    private const string ActivateEventName = "Tasky_SingleInstance_Activate_v1";
+    private const string MutexBaseName         = "Tasky_SingleInstance_Mutex_v1";
+    private const string ActivateEventBaseName = "Tasky_SingleInstance_Activate_v1";
+
+    // A sandboxed copy (TASKY_DATA_ROOT set) is a separate "profile" and may run alongside the real one.
+    private static string Scope => Environment.GetEnvironmentVariable(AppPaths.DataRootOverrideVariable) is { Length: > 0 }
+        ? "_" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+              System.Text.Encoding.UTF8.GetBytes(AppPaths.DataFolder.ToLowerInvariant())))[..16]
+        : string.Empty;
+
+    private static string MutexName         => MutexBaseName + Scope;
+    private static string ActivateEventName => ActivateEventBaseName + Scope;
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activateEvent;

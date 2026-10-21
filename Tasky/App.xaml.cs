@@ -3,6 +3,7 @@ using System.Threading;
 using System.Windows;
 using Microsoft.Win32;
 using Tasky.Services;
+using Tasky.Services.Migration;
 using Tasky.ViewModels;
 
 namespace Tasky;
@@ -35,6 +36,9 @@ public partial class App : Application
 
         SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
 
+        // After "Migrate to another computer" → Import, Tasky restarts itself; let the old copy exit first.
+        MigrationService.WaitForPreviousInstance(e.Args);
+
         _singleInstance = new SingleInstanceService();
         if (!_singleInstance.IsPrimaryInstance)
         {
@@ -47,6 +51,7 @@ public partial class App : Application
             Dispatcher.BeginInvoke(() => (MainWindow as MainWindow)?.ShowFromTray()));
 
         base.OnStartup(e);
+        var importResult = ApplyPendingImport();   // must run before anything opens the data files
         Settings.Load();
 
         Database = new DatabaseService();
@@ -93,11 +98,36 @@ public partial class App : Application
         {
             if (ViewModel.Tasks.Any(t => t.WasInterrupted))
                 InAppNotificationService.Info("⏸  Your timer was paused because Tasky closed while it was running.");
+            importResult?.Notify();
 
             Hotkey = new HotkeyService(mainWindow);
             Hotkey.Register(HotkeyService.MOD_WIN | HotkeyService.MOD_SHIFT, (uint)'T',
                 () => Dispatcher.Invoke(ShowQuickAdd));
         };
+    }
+
+    /// <summary>Outcome of a migration import applied at startup, reported once the window is up.</summary>
+    private sealed record ImportOutcome(bool Succeeded)
+    {
+        public void Notify()
+        {
+            if (Succeeded)
+                InAppNotificationService.Success("✔  Your Tasky data has been imported. Welcome back!");
+            else
+                InAppNotificationService.Error($"Import failed, so your existing data was kept. Details: {CrashLog.CurrentFile}");
+        }
+    }
+
+    private static ImportOutcome? ApplyPendingImport()
+    {
+        try
+        {
+            return MigrationService.ApplyPendingImport() ? new ImportOutcome(true) : null;
+        }
+        catch
+        {
+            return new ImportOutcome(false);   // already logged; current data restored
+        }
     }
 
     private void ShowQuickAdd()

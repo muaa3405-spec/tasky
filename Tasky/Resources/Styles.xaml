@@ -376,6 +376,38 @@
     </Style>
 
     <!-- ══════════════════════════════════════════════════════════════════
+         PASSWORD INPUT — matches InputBox
+    ══════════════════════════════════════════════════════════════════ -->
+    <Style x:Key="PasswordInput" TargetType="PasswordBox">
+        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="14"/>
+        <Setter Property="Padding"         Value="10,8"/>
+        <Setter Property="Background"      Value="{DynamicResource InputBackground}"/>
+        <Setter Property="BorderBrush"     Value="{DynamicResource BorderColor}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground"      Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="CaretBrush"      Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="2,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PrimaryBlue}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ══════════════════════════════════════════════════════════════════
          DIALOG FRAME — accent outline that separates a detail dialog
          from the window behind it
     ══════════════════════════════════════════════════════════════════ -->
