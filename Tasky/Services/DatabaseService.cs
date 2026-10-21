@@ -114,6 +114,16 @@ public class DatabaseService
                 EndTime   TEXT NOT NULL
             );");
 
+        // Files attached to notes (files live in Attachments\notes\<note id>\)
+        Execute(conn, @"
+            CREATE TABLE IF NOT EXISTS NoteAttachments (
+                Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                NoteId    INTEGER NOT NULL,
+                FileName  TEXT    NOT NULL DEFAULT '',
+                FilePath  TEXT    NOT NULL DEFAULT '',
+                CreatedAt TEXT    NOT NULL DEFAULT (datetime('now'))
+            );");
+
         // Schema migrations (idempotent — errors mean column already exists)
         try { Execute(conn, "ALTER TABLE Notes ADD COLUMN Tags TEXT NOT NULL DEFAULT ''"); } catch { }
 
@@ -411,6 +421,7 @@ public class DatabaseService
     {
         Execute(conn, "DELETE FROM Attachments WHERE TaskId NOT IN (SELECT Id FROM Tasks);");
         Execute(conn, "DELETE FROM Reminders   WHERE TaskId NOT IN (SELECT Id FROM Tasks);");
+        Execute(conn, "DELETE FROM NoteAttachments WHERE NoteId NOT IN (SELECT Id FROM Notes);");
     }
 
     public int GetNextTaskNumber()
@@ -610,19 +621,29 @@ public class DatabaseService
     /// <summary>
     /// Attachment rows store absolute paths. When data arrives from another computer
     /// (or the Windows user name changed) those paths point nowhere; re-point each one
-    /// at the same file inside this computer's Attachments\&lt;task id&gt;\ folder.
+    /// at the same file inside this computer's Attachments folder.
     /// </summary>
     private void RepairAttachmentPaths(SqliteConnection conn)
+    {
+        RepairAttachmentPaths(conn, "SELECT Id, TaskId, FilePath FROM Attachments",
+            "UPDATE Attachments SET FilePath = $path WHERE Id = $id", AttachmentFolders.ForTask);
+        RepairAttachmentPaths(conn, "SELECT Id, NoteId, FilePath FROM NoteAttachments",
+            "UPDATE NoteAttachments SET FilePath = $path WHERE Id = $id", AttachmentFolders.ForNote);
+    }
+
+    /// <param name="selectSql">Must return (Id, owner id, FilePath).</param>
+    private void RepairAttachmentPaths(SqliteConnection conn, string selectSql, string updateSql,
+                                       Func<int, string> ownerFolder)
     {
         var fixes = new List<(int Id, string Path)>();
         using (var read = conn.CreateCommand())
         {
-            read.CommandText = "SELECT Id, TaskId, FilePath FROM Attachments";
+            read.CommandText = selectSql;
             using var r = read.ExecuteReader();
             while (r.Read())
             {
                 var stored = r.GetString(2);
-                var local  = Path.Combine(AttachmentsRoot, r.GetInt32(1).ToString(), Path.GetFileName(stored));
+                var local  = Path.Combine(AttachmentsRoot, ownerFolder(r.GetInt32(1)), Path.GetFileName(stored));
                 bool alreadyLocal = string.Equals(Path.GetFullPath(stored), Path.GetFullPath(local),
                                                   StringComparison.OrdinalIgnoreCase);
                 if (!alreadyLocal && File.Exists(local)) fixes.Add((r.GetInt32(0), local));
@@ -633,7 +654,7 @@ public class DatabaseService
         using var tx = conn.BeginTransaction();
         using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
-        cmd.CommandText = "UPDATE Attachments SET FilePath = $path WHERE Id = $id";
+        cmd.CommandText = updateSql;
         var pPath = cmd.Parameters.Add("$path", SqliteType.Text);
         var pId   = cmd.Parameters.Add("$id",   SqliteType.Integer);
         foreach (var (id, path) in fixes) { pId.Value = id; pPath.Value = path; cmd.ExecuteNonQuery(); }
@@ -671,7 +692,10 @@ public class DatabaseService
             Notes:          Count("SELECT COUNT(*) FROM Notes"),
             Groups:         Count("SELECT COUNT(*) FROM Groups"),
             Reminders:      Count("SELECT COUNT(*) FROM Reminders"),
-            Attachments:    Count("SELECT COUNT(*) FROM Attachments"));
+            Attachments:    Count("SELECT COUNT(*) FROM Attachments")
+                          // Files made before note attachments existed have no NoteAttachments table.
+                          + (Count("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'NoteAttachments'") > 0
+                                ? Count("SELECT COUNT(*) FROM NoteAttachments") : 0));
     }
 
     public List<TaskAttachment> GetAttachments(int taskId)
@@ -819,13 +843,90 @@ public class DatabaseService
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Deletes a note together with its attachment rows.</summary>
     public void DeleteNote(int id)
     {
         using var conn = OpenConnection();
+        using var tx = conn.BeginTransaction();
         using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.CommandText = "DELETE FROM NoteAttachments WHERE NoteId=$id";
+        cmd.ExecuteNonQuery();
         cmd.CommandText = "DELETE FROM Notes WHERE Id=$id";
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
+    // Note attachments
+
+    public List<NoteAttachment> GetNoteAttachments(int noteId)
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id, NoteId, FileName, FilePath, CreatedAt FROM NoteAttachments WHERE NoteId=$noteId ORDER BY Id";
+        cmd.Parameters.AddWithValue("$noteId", noteId);
+        using var r = cmd.ExecuteReader();
+        var list = new List<NoteAttachment>();
+        while (r.Read())
+            list.Add(new NoteAttachment
+            {
+                Id        = r.GetInt32(0),
+                NoteId    = r.GetInt32(1),
+                FileName  = r.GetString(2),
+                FilePath  = r.GetString(3),
+                CreatedAt = DateTime.Parse(r.GetString(4))
+            });
+        return list;
+    }
+
+    /// <summary>Attachment count per note id (notes without attachments are absent).</summary>
+    public Dictionary<int, int> GetNoteAttachmentCounts()
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT NoteId, COUNT(*) FROM NoteAttachments GROUP BY NoteId";
+        using var r = cmd.ExecuteReader();
+        var counts = new Dictionary<int, int>();
+        while (r.Read()) counts[r.GetInt32(0)] = r.GetInt32(1);
+        return counts;
+    }
+
+    public NoteAttachment InsertNoteAttachment(NoteAttachment att)
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT INTO NoteAttachments (NoteId,FileName,FilePath,CreatedAt)
+            VALUES ($noteId,$name,$path,$created);
+            SELECT last_insert_rowid();";
+        cmd.Parameters.AddWithValue("$noteId",  att.NoteId);
+        cmd.Parameters.AddWithValue("$name",    att.FileName);
+        cmd.Parameters.AddWithValue("$path",    att.FilePath);
+        cmd.Parameters.AddWithValue("$created", att.CreatedAt.ToString("o"));
+        att.Id = Convert.ToInt32(cmd.ExecuteScalar());
+        return att;
+    }
+
+    public void DeleteNoteAttachment(int id)
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM NoteAttachments WHERE Id=$id";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Ids of every note.</summary>
+    public HashSet<int> GetAllNoteIds()
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id FROM Notes";
+        using var r = cmd.ExecuteReader();
+        var ids = new HashSet<int>();
+        while (r.Read()) ids.Add(r.GetInt32(0));
+        return ids;
     }
 
     // Readers

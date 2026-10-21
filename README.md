@@ -74,8 +74,11 @@ they hold your data. Tasky takes the opposite approach:
 ### 📝 Notes
 - Quick notes with **tags** and full-text search, for ideas, how-tos and snippets
 - One-click copy of a note's text
+- **Attach files to notes**: screenshots, PDFs, documents, anything. Add them from the
+  note, paste with **Ctrl + V** or drag and drop. Notes with files show a 📎 count in the list
 
 ### 📎 Attachments
+- Attach files to **tasks and notes**
 - Paste screenshots with **Ctrl + V**, drag and drop files, or pick them from disk
 - Built-in image viewer with next/previous; other files open in their default app
 
@@ -91,7 +94,7 @@ they hold your data. Tasky takes the opposite approach:
 
 ### 💻 Migrate to another computer
 - Move **everything** to a new PC in **one password-protected file**: open and completed
-  tasks, groups, notes, reminders, attachments, reports history, recycle bin and settings
+  tasks, groups, notes, reminders, task and note attachments, reports history, recycle bin and settings
 - The file is **encrypted with your password** (AES-256), so it is safe on a USB stick or shared drive
 - On the new PC, pick the file, enter the password, and Tasky restarts with all your data,
   as if you had never switched computers
@@ -135,7 +138,8 @@ Everything stays inside your Windows user profile. Nothing is ever uploaded.
 | What | Location |
 |------|----------|
 | Tasks, notes, reminders, reports (SQLite) | `%AppData%\Tasky\tasky.db` |
-| Attachments | `%AppData%\Tasky\Attachments\<task id>\` |
+| Task attachments | `%AppData%\Tasky\Attachments\<task id>\` |
+| Note attachments | `%AppData%\Tasky\Attachments\notes\<note id>\` |
 | Settings | `%AppData%\Tasky\settings.json` |
 | Error logs | `%LocalAppData%\Tasky\logs\` |
 | Safety copy made before an import | `%LocalAppData%\Tasky\before-import\` |

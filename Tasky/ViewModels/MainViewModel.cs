@@ -156,8 +156,12 @@ public class MainViewModel : INotifyPropertyChanged
     public void LoadNotes()
     {
         Notes.Clear();
+        var attachmentCounts = _db.GetNoteAttachmentCounts();
         foreach (var n in _db.GetAllNotes())
+        {
+            n.AttachmentCount = attachmentCounts.GetValueOrDefault(n.Id);
             Notes.Add(n);
+        }
         RefreshFilteredNotes();
     }
 
@@ -186,6 +190,7 @@ public class MainViewModel : INotifyPropertyChanged
     public void DeleteNote(Models.Note note)
     {
         _db.DeleteNote(note.Id);
+        _attachments.DeleteFolder(AttachmentFolders.ForNote(note.Id));
         Notes.Remove(note);
         FilteredNotes.Remove(note);
     }
@@ -670,14 +675,14 @@ public class MainViewModel : INotifyPropertyChanged
     public void PermanentlyDeleteTask(TaskItemViewModel vm)
     {
         _db.DeleteTask(vm.Id);
-        _attachments.DeleteTaskFolder(vm.Id);
+        _attachments.DeleteFolder(AttachmentFolders.ForTask(vm.Id));
         DeletedTasks.Remove(vm);
     }
 
     /// <summary>Permanently delete everything in the recycle bin.</summary>
     public void EmptyTrash()
     {
-        foreach (var id in _db.EmptyTrash()) _attachments.DeleteTaskFolder(id);
+        foreach (var id in _db.EmptyTrash()) _attachments.DeleteFolder(AttachmentFolders.ForTask(id));
         DeletedTasks.Clear();
     }
 
@@ -685,11 +690,12 @@ public class MainViewModel : INotifyPropertyChanged
     public void PurgeExpiredDeletedTasks()
     {
         var cutoff = DateTime.Now.AddDays(-TrashRetentionDays);
-        foreach (var id in _db.PurgeDeletedOlderThan(cutoff)) _attachments.DeleteTaskFolder(id);
+        foreach (var id in _db.PurgeDeletedOlderThan(cutoff)) _attachments.DeleteFolder(AttachmentFolders.ForTask(id));
     }
 
     /// <summary>Removes attachment folders of tasks that were deleted by older versions of Tasky.</summary>
-    public void DeleteOrphanAttachmentFolders() => _attachments.DeleteOrphanFolders(_db.GetAllTaskIds());
+    public void DeleteOrphanAttachmentFolders()
+        => _attachments.DeleteOrphanFolders(_db.GetAllTaskIds(), _db.GetAllNoteIds());
 
     // Re-sort
 
@@ -819,20 +825,40 @@ public class MainViewModel : INotifyPropertyChanged
 
     // Attachments
 
+    private const string PastedImageName = "pasted image";
+
     /// <summary>Copies a file into the task's attachments. Returns false (and tells the user) if it failed.</summary>
     public bool SaveAttachment(int taskId, string sourcePath)
-        => TrySaveAttachment(taskId, () => _attachments.SaveCopy(taskId, sourcePath), Path.GetFileName(sourcePath));
+        => TrySaveAttachment(() => _attachments.SaveCopy(AttachmentFolders.ForTask(taskId), sourcePath),
+                             dest => InsertTaskAttachment(taskId, dest), Path.GetFileName(sourcePath));
 
     /// <summary>Saves pasted image bytes as a new attachment. Returns false (and tells the user) if it failed.</summary>
     public bool SaveAttachmentFromBytes(int taskId, byte[] data, string ext)
-        => TrySaveAttachment(taskId, () => _attachments.SaveBytes(taskId, data, ext), "pasted image");
+        => TrySaveAttachment(() => _attachments.SaveBytes(AttachmentFolders.ForTask(taskId), data, ext),
+                             dest => InsertTaskAttachment(taskId, dest), PastedImageName);
 
-    private bool TrySaveAttachment(int taskId, Func<string> writeFile, string displayName)
+    /// <summary>Copies a file into the note's attachments. Returns false (and tells the user) if it failed.</summary>
+    public bool SaveNoteAttachment(int noteId, string sourcePath)
+        => TrySaveAttachment(() => _attachments.SaveCopy(AttachmentFolders.ForNote(noteId), sourcePath),
+                             dest => InsertNoteAttachment(noteId, dest), Path.GetFileName(sourcePath));
+
+    /// <summary>Saves pasted image bytes on a note. Returns false (and tells the user) if it failed.</summary>
+    public bool SaveNoteAttachmentFromBytes(int noteId, byte[] data, string ext)
+        => TrySaveAttachment(() => _attachments.SaveBytes(AttachmentFolders.ForNote(noteId), data, ext),
+                             dest => InsertNoteAttachment(noteId, dest), PastedImageName);
+
+    private void InsertTaskAttachment(int taskId, string path)
+        => _db.InsertAttachment(new TaskAttachment { TaskId = taskId, FileName = Path.GetFileName(path), FilePath = path });
+
+    private void InsertNoteAttachment(int noteId, string path)
+        => _db.InsertNoteAttachment(new NoteAttachment { NoteId = noteId, FileName = Path.GetFileName(path), FilePath = path });
+
+    /// <summary>Writes the file, then records it; on any failure the user is told and false is returned.</summary>
+    private static bool TrySaveAttachment(Func<string> writeFile, Action<string> insertRow, string displayName)
     {
         try
         {
-            var dest = writeFile();
-            _db.InsertAttachment(new TaskAttachment { TaskId = taskId, FileName = Path.GetFileName(dest), FilePath = dest });
+            insertRow(writeFile());
             return true;
         }
         catch (Exception ex)
@@ -849,6 +875,21 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _db.DeleteAttachment(attachment.Id);
         _attachments.DeleteFile(attachment.FilePath);
+    }
+
+    public List<NoteAttachment> GetNoteAttachments(int noteId) => _db.GetNoteAttachments(noteId);
+
+    public void DeleteNoteAttachment(NoteAttachment attachment)
+    {
+        _db.DeleteNoteAttachment(attachment.Id);
+        _attachments.DeleteFile(attachment.FilePath);
+    }
+
+    /// <summary>Updates the 📎 count on a note card after its attachments changed.</summary>
+    public void RefreshNoteAttachmentCount(Models.Note note)
+    {
+        note.AttachmentCount = _db.GetNoteAttachments(note.Id).Count;
+        RefreshFilteredNotes();
     }
 
     /// <summary>

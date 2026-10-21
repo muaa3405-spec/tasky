@@ -9,12 +9,12 @@ namespace Tasky.Windows;
 
 public partial class ImageViewerWindow : Window
 {
-    private readonly List<TaskAttachment> _all;
+    private readonly IReadOnlyList<IAttachment> _all;
     private int _index;
     private double _zoom = 1.0;
     private const double ZoomStep = 0.15;
 
-    public ImageViewerWindow(List<TaskAttachment> attachments, int startIndex = 0)
+    public ImageViewerWindow(IReadOnlyList<IAttachment> attachments, int startIndex = 0)
     {
         _all   = attachments;
         _index = startIndex;
