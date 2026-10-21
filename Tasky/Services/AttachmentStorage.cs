@@ -3,9 +3,10 @@ using System.IO;
 namespace Tasky.Services;
 
 /// <summary>
-/// Owns the attachment files on disk (one folder per task under the data folder).
-/// Every new file gets a unique name, so pasting or attaching several files at
-/// once never overwrites an earlier one. Deletes are limited to this folder.
+/// Owns the attachment files on disk: one folder per task or note under the data
+/// folder (see <see cref="AttachmentFolders"/>). Every new file gets a unique name,
+/// so pasting or attaching several files at once never overwrites an earlier one.
+/// Deletes are limited to this folder.
 /// </summary>
 public sealed class AttachmentStorage
 {
@@ -17,19 +18,21 @@ public sealed class AttachmentStorage
         Directory.CreateDirectory(_root);
     }
 
-    /// <summary>Copies a user file into the task's folder, keeping its name where possible.</summary>
-    public string SaveCopy(int taskId, string sourcePath)
+    /// <summary>Copies a user file into the owner's folder, keeping its name where possible.</summary>
+    /// <param name="ownerFolder">From <see cref="AttachmentFolders"/>.</param>
+    public string SaveCopy(string ownerFolder, string sourcePath)
     {
-        var dest = UniquePath(TaskFolder(taskId),
+        var dest = UniquePath(EnsureFolder(ownerFolder),
             Path.GetFileNameWithoutExtension(sourcePath), Path.GetExtension(sourcePath));
         File.Copy(sourcePath, dest, overwrite: false);
         return dest;
     }
 
     /// <summary>Writes pasted image bytes to a new, uniquely named file.</summary>
-    public string SaveBytes(int taskId, byte[] data, string extension)
+    /// <param name="ownerFolder">From <see cref="AttachmentFolders"/>.</param>
+    public string SaveBytes(string ownerFolder, byte[] data, string extension)
     {
-        var dest = UniquePath(TaskFolder(taskId), $"img_{DateTime.Now:yyyyMMdd_HHmmss}", extension);
+        var dest = UniquePath(EnsureFolder(ownerFolder), $"img_{DateTime.Now:yyyyMMdd_HHmmss}", extension);
         using (var fs = new FileStream(dest, FileMode.CreateNew, FileAccess.Write))
             fs.Write(data);
         return dest;
@@ -41,29 +44,41 @@ public sealed class AttachmentStorage
         TryDelete(() => File.Delete(path));
     }
 
-    public void DeleteTaskFolder(int taskId)
+    /// <param name="ownerFolder">From <see cref="AttachmentFolders"/>.</param>
+    public void DeleteFolder(string ownerFolder)
     {
-        var folder = Path.Combine(_root, taskId.ToString());
+        var folder = Path.Combine(_root, ownerFolder);
+        if (!IsInsideRoot(folder)) return;
         TryDelete(() => { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); });
     }
 
-    /// <summary>Removes task folders whose task no longer exists (left over from older versions).</summary>
-    public void DeleteOrphanFolders(ISet<int> existingTaskIds)
+    /// <summary>
+    /// Removes task and note folders whose owner no longer exists (left over from older
+    /// versions). An empty id set more likely means a missing or reset database than
+    /// "everything was deleted", so that kind of folder is then left alone.
+    /// </summary>
+    public void DeleteOrphanFolders(ISet<int> existingTaskIds, ISet<int> existingNoteIds)
     {
-        // An empty task table more likely means a missing/reset database than
-        // "everything was deleted" — leave the files alone in that case.
-        if (existingTaskIds.Count == 0) return;
+        if (existingTaskIds.Count > 0)
+            DeleteOrphansIn(_root, existingTaskIds, AttachmentFolders.ForTask);
 
-        foreach (var dir in Directory.EnumerateDirectories(_root))
+        var notesRoot = Path.Combine(_root, AttachmentFolders.NotesFolderName);
+        if (existingNoteIds.Count > 0 && Directory.Exists(notesRoot))
+            DeleteOrphansIn(notesRoot, existingNoteIds, AttachmentFolders.ForNote);
+    }
+
+    private void DeleteOrphansIn(string parent, ISet<int> existingIds, Func<int, string> ownerFolder)
+    {
+        foreach (var dir in Directory.EnumerateDirectories(parent))
         {
-            if (int.TryParse(Path.GetFileName(dir), out int id) && !existingTaskIds.Contains(id))
-                DeleteTaskFolder(id);
+            if (int.TryParse(Path.GetFileName(dir), out int id) && !existingIds.Contains(id))
+                DeleteFolder(ownerFolder(id));
         }
     }
 
-    private string TaskFolder(int taskId)
+    private string EnsureFolder(string ownerFolder)
     {
-        var folder = Path.Combine(_root, taskId.ToString());
+        var folder = Path.Combine(_root, ownerFolder);
         Directory.CreateDirectory(folder);
         return folder;
     }

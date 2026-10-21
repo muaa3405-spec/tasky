@@ -779,6 +779,13 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
+                                                <!-- Attachment count (only when the note has files) -->
+                                                <TextBlock Visibility="{Binding HasAttachments, Converter={StaticResource BoolToVis}}"
+                                                           FontSize="11" Foreground="{DynamicResource TextSecondary}"
+                                                           Margin="0,5,0,0">
+                                                    <Run Text="&#x1F4CE;"/>
+                                                    <Run Text="{Binding AttachmentCountDisplay, Mode=OneWay}"/>
+                                                </TextBlock>
                                             </StackPanel>
                                             <Button Grid.Column="1" Style="{StaticResource IconButton}"
                                                     VerticalAlignment="Center" Click="DeleteNote_Click">

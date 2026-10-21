@@ -27,6 +27,55 @@ public partial class NoteDetailDialog : Window
         TagsBox.Text  = _note.Tags;
         _isDirty = false;          // reset after TextChanged fires on load
         SaveBtn.IsEnabled = false;
+
+        Attachments.FilesAdded      += AttachFiles;
+        Attachments.ImagePasted     += AttachPastedImage;
+        Attachments.DeleteRequested += RemoveAttachment;
+        ReloadAttachments();
+    }
+
+    // ─── Attachments (saved immediately) ──────────────────────────────────
+
+    private void ReloadAttachments()
+    {
+        Attachments.SetAttachments(_vm.GetNoteAttachments(_note.Id));
+        _vm.RefreshNoteAttachmentCount(_note);
+    }
+
+    private void AttachFiles(IReadOnlyList<string> paths)
+    {
+        int saved = paths.Count(path => _vm.SaveNoteAttachment(_note.Id, path));
+        ReloadAttachments();
+        if (saved > 0) InAppNotificationService.Success(saved == 1 ? "File attached." : $"{saved} files attached.");
+    }
+
+    private void AttachPastedImage(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        if (_vm.SaveNoteAttachmentFromBytes(_note.Id, ImageFiles.EncodePng(image), ".png"))
+            InAppNotificationService.Success("Image pasted and attached.");
+        ReloadAttachments();
+    }
+
+    private void RemoveAttachment(Models.IAttachment attachment)
+    {
+        if (attachment is not Models.NoteAttachment noteAttachment) return;
+        var confirm = new ConfirmDialog("Remove Attachment",
+            $"Remove \"{attachment.FileName}\" from this note?", "Remove", ConfirmType.Warning) { Owner = this };
+        if (confirm.ShowDialog() != true) return;
+        _vm.DeleteNoteAttachment(noteAttachment);
+        ReloadAttachments();
+    }
+
+    /// <summary>
+    /// Ctrl+V attaches a copied image or files. While typing in a text box, a
+    /// clipboard that holds text still pastes as text.
+    /// </summary>
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.V ||
+            (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == 0) return;
+        bool typingText = e.OriginalSource is System.Windows.Controls.TextBox && SafeClipboard.ContainsText();
+        if (!typingText) e.Handled = Attachments.TryPaste();
     }
 
     // ─── Dirty tracking ───────────────────────────────────────────────────

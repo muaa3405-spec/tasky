@@ -1,7 +1,9 @@
 <Window x:Class="Tasky.Dialogs.NoteDetailDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="clr-namespace:Tasky.Controls"
         Title="Note"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Background="{DynamicResource AppBackground}"
         Width="500" SizeToContent="Height"
         MinHeight="260"
@@ -56,6 +58,10 @@
                  Tag="Comma-separated tags, e.g. iphone, bluetooth, settings"
                  Margin="0,0,0,20"
                  TextChanged="Field_Changed"/>
+
+        <!-- Attachments — saved immediately, independent of "Save Changes" -->
+        <TextBlock Text="ATTACHMENTS" Style="{StaticResource LabelText}" Margin="0,0,0,4"/>
+        <ctrl:AttachmentsPanel x:Name="Attachments" Margin="0,0,0,20"/>
 
     </StackPanel>
     </ScrollViewer>

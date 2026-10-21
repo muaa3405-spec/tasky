@@ -18,6 +18,7 @@ public static class SafeClipboard
     public static bool TrySetText(string text)          => Try(() => Clipboard.SetText(text));
     public static bool TrySetImage(BitmapSource image)  => Try(() => Clipboard.SetImage(image));
 
+    public static bool ContainsText()         => TryGet(Clipboard.ContainsText);
     public static bool ContainsImage()        => TryGet(Clipboard.ContainsImage);
     public static bool ContainsFileDropList() => TryGet(Clipboard.ContainsFileDropList);
 

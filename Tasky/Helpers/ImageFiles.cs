@@ -11,6 +11,16 @@ public static class ImageFiles
 
     public static bool IsImage(string path) => ImageExtensions.Contains(Path.GetExtension(path));
 
+    /// <summary>Encodes an in-memory image (e.g. from the clipboard) as PNG bytes.</summary>
+    public static byte[] EncodePng(BitmapSource image)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(image));
+        using var ms = new MemoryStream();
+        encoder.Save(ms);
+        return ms.ToArray();
+    }
+
     /// <summary>
     /// Loads an image fully into memory and releases the file straight away,
     /// so the attachment can still be deleted or replaced while it is shown.

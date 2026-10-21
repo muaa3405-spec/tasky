@@ -1,6 +1,6 @@
 namespace Tasky.Models;
 
-public class TaskAttachment
+public class TaskAttachment : IAttachment
 {
     public int Id { get; set; }
     public int TaskId { get; set; }
