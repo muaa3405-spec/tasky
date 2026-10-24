@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="AppBackground"      Color="#111827"/>
+    <SolidColorBrush x:Key="CardBackground"     Color="#1F2937"/>
+    <SolidColorBrush x:Key="HeaderBackground"   Color="#1F2937"/>
+    <SolidColorBrush x:Key="BorderColor"        Color="#374151"/>
+    <SolidColorBrush x:Key="TextPrimary"        Color="#F9FAFB"/>
+    <SolidColorBrush x:Key="TextSecondary"      Color="#9CA3AF"/>
+    <SolidColorBrush x:Key="PlaceholderColor"   Color="#6B7280"/>
+    <SolidColorBrush x:Key="InputBackground"    Color="#374151"/>
+    <SolidColorBrush x:Key="PrimaryBlue"        Color="#60A5FA"/>
+    <SolidColorBrush x:Key="AccentGreen"        Color="#34D399"/>
+    <SolidColorBrush x:Key="TagBackground"      Color="#1E3A5F"/>
+    <SolidColorBrush x:Key="TagForeground"      Color="#60A5FA"/>
+    <SolidColorBrush x:Key="ShadowColor"        Color="#000000"/>
+    <SolidColorBrush x:Key="DialogFrameBorder"  Color="#60A5FA" Opacity="0.6"/>
+    <SolidColorBrush x:Key="CompletedOpacity"   Color="#9CA3AF"/>
+    <SolidColorBrush x:Key="CalendarDayTitle"   Color="#CBD5E1"/>
+</ResourceDictionary>

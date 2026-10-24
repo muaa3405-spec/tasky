@@ -1,0 +1,141 @@
+<Window x:Class="Tasky.Dialogs.ManualTimeDialog"
+        Classes="toolWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Time Spent" Width="340" SizeToContent="Height"
+        Background="{DynamicResource AppBackground}"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+
+    <StackPanel Margin="24,20">
+
+        <TextBlock Text="How long did you spend on this task?"
+                   FontSize="14" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}"
+                   TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+        <!-- Quick option: No idea -->
+        <Button Click="NoIdea_Click" HorizontalAlignment="Stretch"
+                Margin="0,0,0,18" Cursor="Hand">
+            <Button.Theme>
+                <ControlTheme TargetType="Button">
+                    <Setter Property="Template">
+                        <ControlTemplate>
+                            <Border Name="Bd"
+                                    Background="{DynamicResource CardBackground}"
+                                    BorderBrush="{DynamicResource BorderColor}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14,10">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="🤷" FontSize="16" Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="No idea" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimary}"/>
+                                        <TextBlock Text="Skip time tracking for this task"
+                                                   Theme="{StaticResource SubText}" Margin="0,1,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter>
+                    <Style Selector="^:pointerover /template/ Border#Bd">
+                        <Setter Property="BorderBrush" Value="#60A5FA"/>
+                    </Style>
+                </ControlTheme>
+            </Button.Theme>
+        </Button>
+
+        <!-- Divider -->
+        <Grid Margin="0,0,0,16">
+            <Border Height="1" Background="{DynamicResource BorderColor}" VerticalAlignment="Center"/>
+            <Border Background="{DynamicResource AppBackground}"
+                    HorizontalAlignment="Center" Padding="10,0">
+                <TextBlock Text="or enter time"
+                           Theme="{StaticResource SubText}" FontSize="11"/>
+            </Border>
+        </Grid>
+
+        <!-- Spinner inputs -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,22">
+
+            <!-- Hours spinner (0 – 100) -->
+            <StackPanel Margin="0,0,20,0">
+                <TextBlock Text="HOURS" Theme="{StaticResource LabelText}" Margin="0,0,0,6"/>
+                <Border Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                        CornerRadius="8" Padding="4">
+                    <Grid Width="90" RowDefinitions="28,40,28">
+                        <Button Grid.Row="0" Content="▲" FontSize="11"
+                                Theme="{StaticResource PlainButton}"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Cursor="Hand" Click="HoursUp_Click"
+                                HorizontalAlignment="Stretch"/>
+                        <TextBox Grid.Row="1" x:Name="HoursBox"
+                                 Theme="{StaticResource PlainTextBox}"
+                                 FontSize="22" FontWeight="Bold"
+                                 Foreground="{DynamicResource TextPrimary}"
+                                 Background="Transparent" BorderThickness="0"
+                                 TextAlignment="Center" VerticalContentAlignment="Center"
+                                 MaxLength="3"
+                                 TextChanged="HoursBox_TextChanged"
+                                 LostFocus="HoursBox_LostFocus"/>
+                        <Button Grid.Row="2" Content="▼" FontSize="11"
+                                Theme="{StaticResource PlainButton}"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Cursor="Hand" Click="HoursDown_Click"
+                                HorizontalAlignment="Stretch"/>
+                    </Grid>
+                </Border>
+                <TextBlock Text="0 – 100 hrs" FontSize="10"
+                           Foreground="{DynamicResource TextSecondary}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- Minutes spinner (0 – 59) -->
+            <StackPanel>
+                <TextBlock Text="MINUTES" Theme="{StaticResource LabelText}" Margin="0,0,0,6"/>
+                <Border Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                        CornerRadius="8" Padding="4">
+                    <Grid Width="90" RowDefinitions="28,40,28">
+                        <Button Grid.Row="0" Content="▲" FontSize="11"
+                                Theme="{StaticResource PlainButton}"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Cursor="Hand" Click="MinutesUp_Click"
+                                HorizontalAlignment="Stretch"/>
+                        <TextBox Grid.Row="1" x:Name="MinutesBox"
+                                 Theme="{StaticResource PlainTextBox}"
+                                 FontSize="22" FontWeight="Bold"
+                                 Foreground="{DynamicResource TextPrimary}"
+                                 Background="Transparent" BorderThickness="0"
+                                 TextAlignment="Center" VerticalContentAlignment="Center"
+                                 MaxLength="2"
+                                 TextChanged="MinutesBox_TextChanged"
+                                 LostFocus="MinutesBox_LostFocus"/>
+                        <Button Grid.Row="2" Content="▼" FontSize="11"
+                                Theme="{StaticResource PlainButton}"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Cursor="Hand" Click="MinutesDown_Click"
+                                HorizontalAlignment="Stretch"/>
+                    </Grid>
+                </Border>
+                <TextBlock Text="0 – 59 min" FontSize="10"
+                           Foreground="{DynamicResource TextSecondary}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Action buttons -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,10,0" Click="Cancel_Click"/>
+            <Button Content="Save Time" Theme="{StaticResource PrimaryButton}"
+                    Click="Save_Click"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

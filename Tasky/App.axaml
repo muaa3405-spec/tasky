@@ -1,0 +1,39 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Tasky.App"
+             Name="Tasky"
+             RequestedThemeVariant="Dark">
+    <Application.Styles>
+        <FluentTheme/>
+
+        <!-- Same base text as the original Windows design: 12px, black unless a style says otherwise.
+             (The font itself is set once in Program.cs: Segoe UI on Windows, the system font on macOS.) -->
+        <Style Selector=":is(Window)">
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
+        <!-- Tool dialogs: content fills the whole window, no title bar or caption buttons,
+             and the top 36px drag the window (the original WindowChrome look) -->
+        <Style Selector="Window.toolWindow">
+            <Setter Property="ExtendClientAreaToDecorationsHint" Value="True"/>
+            <Setter Property="ExtendClientAreaChromeHints"       Value="NoChrome"/>
+            <Setter Property="ExtendClientAreaTitleBarHeightHint" Value="36"/>
+        </Style>
+        <!-- WPF lays out at fractional positions (no layout rounding); match it so heights add up the same -->
+        <Style Selector=":is(Layoutable)">
+            <Setter Property="UseLayoutRounding" Value="False"/>
+        </Style>
+    </Application.Styles>
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Swapped at runtime through RequestedThemeVariant (Dark / Light) -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceInclude x:Key="Dark"  Source="avares://Tasky/Resources/DarkTheme.axaml"/>
+                <ResourceInclude x:Key="Light" Source="avares://Tasky/Resources/LightTheme.axaml"/>
+            </ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Tasky/Resources/Styles.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

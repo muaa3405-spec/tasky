@@ -1,5 +1,5 @@
 using System.IO;
-using System.Windows.Media.Imaging;
+using Avalonia.Media.Imaging;
 
 namespace Tasky.Helpers;
 
@@ -11,40 +11,30 @@ public static class ImageFiles
 
     public static bool IsImage(string path) => ImageExtensions.Contains(Path.GetExtension(path));
 
-    /// <summary>Encodes an in-memory image (e.g. from the clipboard) as PNG bytes.</summary>
-    public static byte[] EncodePng(BitmapSource image)
-    {
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(image));
-        using var ms = new MemoryStream();
-        encoder.Save(ms);
-        return ms.ToArray();
-    }
-
     /// <summary>
     /// Loads an image fully into memory and releases the file straight away,
     /// so the attachment can still be deleted or replaced while it is shown.
     /// Pass <paramref name="decodeWidth"/> for thumbnails to avoid decoding at full size.
     /// Returns null when the file is missing or cannot be decoded.
     /// </summary>
-    public static BitmapImage? Load(string path, int decodeWidth = 0)
+    public static Bitmap? Load(string path, int decodeWidth = 0)
     {
         if (!File.Exists(path)) return null;
         try
         {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            if (decodeWidth > 0) bmp.DecodePixelWidth = decodeWidth;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
+            using var stream = new MemoryStream(File.ReadAllBytes(path));
+            return decodeWidth > 0 ? Bitmap.DecodeToWidth(stream, decodeWidth) : new Bitmap(stream);
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>Decodes in-memory image bytes (e.g. a pasted screenshot), or null.</summary>
+    public static Bitmap? FromBytes(byte[] data)
+    {
+        try { return new Bitmap(new MemoryStream(data)); }
+        catch { return null; }
     }
 }

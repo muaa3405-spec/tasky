@@ -1,0 +1,95 @@
+<Window x:Class="Tasky.Dialogs.ReminderToastWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        SystemDecorations="None" CanResize="False"
+        ShowInTaskbar="False" Topmost="True"
+        TransparencyLevelHint="Transparent" Background="Transparent"
+        Width="340" SizeToContent="Height"
+        WindowStartupLocation="Manual"
+        RequestedThemeVariant="Dark">
+    <!-- The toast always uses the dark theme brushes, whatever the app theme is -->
+
+    <Border CornerRadius="12" Background="#1F2937" Padding="0" x:Name="RootBorder">
+        <Border.RenderTransform>
+            <TranslateTransform X="360"/>
+        </Border.RenderTransform>
+        <Border.Effect>
+            <DropShadowDirectionEffect BlurRadius="24" ShadowDepth="5" Opacity="0.5" Color="#000000"/>
+        </Border.Effect>
+        <Grid>
+            <!-- Blue top accent bar -->
+            <Border x:Name="AccentStrip" Height="3" VerticalAlignment="Top" CornerRadius="12,12,0,0"
+                    Background="#60A5FA"/>
+
+            <StackPanel Margin="16,14,16,16">
+
+                <!-- Header row -->
+                <Grid Margin="0,0,0,10" ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Column="0" Text="⏰" FontSize="15"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Grid.Column="1" Text="Tasky Reminder"
+                               FontSize="13" FontWeight="SemiBold" Foreground="#60A5FA"
+                               VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Content="✕" Click="Dismiss_Click"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="#6B7280" FontSize="13" Cursor="Hand"
+                            Padding="6,0" VerticalAlignment="Center">
+                        <Button.Theme>
+                            <ControlTheme TargetType="Button">
+                                <Setter Property="Template">
+                                    <ControlTemplate>
+                                        <TextBlock Name="T" Text="✕" FontSize="13"
+                                                   Foreground="#6B7280" Cursor="Hand"/>
+                                    </ControlTemplate>
+                                </Setter>
+                                <Style Selector="^:pointerover /template/ TextBlock#T">
+                                    <Setter Property="Foreground" Value="#F9FAFB"/>
+                                </Style>
+                            </ControlTheme>
+                        </Button.Theme>
+                    </Button>
+                </Grid>
+
+                <!-- Task title -->
+                <TextBlock x:Name="TitleText"
+                           FontSize="13" FontWeight="SemiBold" Foreground="#F9FAFB"
+                           TextWrapping="Wrap" Margin="0,0,0,14" LineHeight="19"/>
+
+                <!-- Snooze row -->
+                <Grid Margin="0,0,0,12" ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="Snooze for" FontSize="12"
+                               Foreground="#9CA3AF" VerticalAlignment="Center"
+                               Margin="0,0,10,0"/>
+                    <ComboBox x:Name="SnoozeBox" Grid.Column="1"
+                              Theme="{StaticResource ThemedComboBox}"
+                              HorizontalAlignment="Stretch"
+                              FontSize="12" Height="32"
+                              SelectedIndex="1">
+                        <ComboBoxItem Content="1 minute"   Tag="1"/>
+                        <ComboBoxItem Content="5 minutes"  Tag="5"/>
+                        <ComboBoxItem Content="10 minutes" Tag="10"/>
+                        <ComboBoxItem Content="30 minutes" Tag="30"/>
+                        <ComboBoxItem Content="1 hour"     Tag="60"/>
+                    </ComboBox>
+                </Grid>
+
+                <!-- Action buttons -->
+                <Grid ColumnDefinitions="Auto,8,*,8,Auto">
+
+                    <Button Grid.Column="0" Content="Snooze" Click="Snooze_Click"
+                            Theme="{StaticResource SecondaryButton}" Height="32" FontSize="12"
+                            Padding="14,0"/>
+
+                    <Button Grid.Column="2" Content="Open Task" Click="OpenTask_Click"
+                            Theme="{StaticResource PrimaryButton}" Height="32" FontSize="12"
+                            FontWeight="SemiBold" HorizontalAlignment="Stretch"/>
+
+                    <Button Grid.Column="4" Content="Dismiss" Click="Dismiss_Click"
+                            Theme="{StaticResource SecondaryButton}" Height="32" FontSize="12"
+                            Padding="14,0"/>
+                </Grid>
+
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

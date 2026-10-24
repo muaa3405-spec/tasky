@@ -1,11 +1,10 @@
-using System.IO;
-using Microsoft.Toolkit.Uwp.Notifications;
+using Avalonia.Threading;
 
 namespace Tasky.Services;
 
 /// <summary>
-/// Wraps Windows Toast Notifications via the Community Toolkit.
-/// The toolkit handles AUMID registration for unpackaged Win32 apps automatically.
+/// Shows reminder notifications as Tasky's own themed toast window
+/// (bottom-right of the screen), with a tray balloon as fallback.
 /// </summary>
 public class NotificationService
 {
@@ -13,31 +12,23 @@ public class NotificationService
 
     public NotificationService(DatabaseService db) => _db = db;
 
-    public void Initialize()
-    {
-        // Registers the COM activator and AUMID for unpackaged apps.
-        // Must be called once before sending any toast.
-        ToastNotificationManagerCompat.OnActivated += OnToastActivated;
-    }
-
     public void SendReminder(string taskTitle, int taskId = 0, string? body = null)
     {
         var displayTitle = taskId > 0 ? $"#{taskId:D3}  {taskTitle}" : taskTitle;
 
         // Show our own themed blue toast window — same approach as Teams/Slack
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        Dispatcher.UIThread.Post(() =>
         {
             try
             {
-                var toast = new Tasky.Dialogs.ReminderToastWindow(displayTitle, taskTitle, taskId);
+                var toast = new Dialogs.ReminderToastWindow(displayTitle, taskTitle, taskId);
                 toast.Show();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Tasky] Custom toast failed: {ex.Message}");
+                CrashLog.Write("Custom reminder toast failed", ex);
                 // Fallback: tray balloon
-                if (System.Windows.Application.Current.MainWindow is MainWindow mw)
-                    mw.ShowBalloonReminder(displayTitle, body ?? "Time to work on this task.");
+                App.MainAppWindow?.ShowBalloonReminder(displayTitle, body ?? "Time to work on this task.");
             }
         });
     }
@@ -58,42 +49,5 @@ public class NotificationService
             Frequency    = Models.ReminderFrequency.Once,
             IsEnabled    = true
         });
-    }
-
-    private void OnToastActivated(ToastNotificationActivatedEventArgsCompat e)
-    {
-        var arg = e.Argument ?? string.Empty;
-        if (arg.Contains("action=dismiss")) return;
-
-        // Parse optional taskId from "action=open&taskId=42"
-        int taskId = 0;
-        foreach (var part in arg.Split('&'))
-        {
-            var kv = part.Split('=');
-            if (kv.Length == 2 && kv[0] == "taskId")
-                int.TryParse(kv[1], out taskId);
-        }
-
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (System.Windows.Application.Current.MainWindow is not MainWindow mw) return;
-
-            if (taskId > 0)
-            {
-                // Find the task VM and open its detail dialog
-                var vm = App.ViewModel?.Tasks.FirstOrDefault(t => t.Id == taskId)
-                      ?? App.ViewModel?.CompletedTasks.FirstOrDefault(t => t.Id == taskId);
-                if (vm is not null) { mw.OpenTaskDetail(vm); return; }
-            }
-
-            mw.ShowFromTray();
-            mw.Activate();
-        });
-    }
-
-    public void Cleanup()
-    {
-        // Unregister COM activator on exit
-        ToastNotificationManagerCompat.Uninstall();
     }
 }

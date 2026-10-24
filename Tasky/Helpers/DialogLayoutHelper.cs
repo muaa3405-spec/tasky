@@ -1,4 +1,4 @@
-using System.Windows;
+using Avalonia.Controls;
 
 namespace Tasky.Helpers;
 
@@ -15,6 +15,6 @@ public static class DialogLayoutHelper
     public static void FitToWorkArea(Window window)
     {
         window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        window.MaxHeight = SystemParameters.WorkArea.Height * MaxWorkAreaHeightRatio;
+        window.MaxHeight = ScreenHelper.WorkArea(window).Height * MaxWorkAreaHeightRatio;
     }
 }

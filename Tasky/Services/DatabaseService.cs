@@ -643,7 +643,7 @@ public class DatabaseService
             while (r.Read())
             {
                 var stored = r.GetString(2);
-                var local  = Path.Combine(AttachmentsRoot, ownerFolder(r.GetInt32(1)), Path.GetFileName(stored));
+                var local  = Path.Combine(AttachmentsRoot, ownerFolder(r.GetInt32(1)), FileNameOf(stored));
                 bool alreadyLocal = string.Equals(Path.GetFullPath(stored), Path.GetFullPath(local),
                                                   StringComparison.OrdinalIgnoreCase);
                 if (!alreadyLocal && File.Exists(local)) fixes.Add((r.GetInt32(0), local));
@@ -660,6 +660,13 @@ public class DatabaseService
         foreach (var (id, path) in fixes) { pId.Value = id; pPath.Value = path; cmd.ExecuteNonQuery(); }
         tx.Commit();
     }
+
+    /// <summary>
+    /// File name of a path stored on any OS. A Windows path ("C:\…\a.png") read on
+    /// macOS still yields "a.png", although '\' is not a separator there.
+    /// </summary>
+    private static string FileNameOf(string storedPath)
+        => storedPath[(storedPath.LastIndexOfAny(['\\', '/']) + 1)..];
 
     /// <summary>
     /// Writes a consistent copy of the whole database to <paramref name="destinationFile"/>

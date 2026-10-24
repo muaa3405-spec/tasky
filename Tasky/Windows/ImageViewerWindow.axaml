@@ -1,0 +1,118 @@
+<Window x:Class="Tasky.Windows.ImageViewerWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Image Viewer — Tasky"
+        SystemDecorations="None" TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False"
+        Width="860" Height="620"
+        KeyDown="Window_KeyDown"
+        PointerPressed="Window_PointerPressed">
+
+    <!-- The open (fade + scale in) and close (fade + scale out) animations run in code. -->
+
+    <Window.Resources>
+        <!-- Stock WPF button chrome over a transparent background, as every viewer button had -->
+        <ControlTheme x:Key="ViewerButton" TargetType="Button" BasedOn="{StaticResource PlainButton}">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <!-- Semi-transparent backdrop — click to close -->
+    <Grid>
+        <Rectangle Fill="#CC000000" PointerPressed="Backdrop_Click"/>
+
+        <!-- Viewer card -->
+        <Border x:Name="Root" Background="#0F172A" CornerRadius="12"
+                MaxWidth="820" MaxHeight="580"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Opacity="0"
+                RenderTransformOrigin="410,290">
+            <Border.Effect>
+                <DropShadowDirectionEffect BlurRadius="40" ShadowDepth="8" Opacity="0.5" Color="#000000"/>
+            </Border.Effect>
+            <Border.RenderTransform>
+                <ScaleTransform/>
+            </Border.RenderTransform>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                    <RowDefinition Height="*"/>     <!-- image -->
+                    <RowDefinition Height="Auto"/>  <!-- filename -->
+                </Grid.RowDefinitions>
+
+                <!-- Toolbar -->
+                <Grid Grid.Row="0" Margin="16,14,16,0">
+                    <TextBlock x:Name="TitleLabel" FontSize="13" FontWeight="SemiBold"
+                               Foreground="#94A3B8" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Zoom out -->
+                        <Button x:Name="ZoomOutBtn" Content="−" FontSize="16" FontWeight="Bold"
+                                Theme="{StaticResource ViewerButton}"
+                                Foreground="White" Padding="8,2" Click="ZoomOut_Click"
+                                ToolTip.Tip="Zoom out  (scroll wheel)"/>
+                        <!-- Zoom in -->
+                        <Button x:Name="ZoomInBtn"  Content="+" FontSize="16" FontWeight="Bold"
+                                Theme="{StaticResource ViewerButton}"
+                                Foreground="White" Padding="8,2" Click="ZoomIn_Click"
+                                ToolTip.Tip="Zoom in  (scroll wheel)"/>
+                        <!-- Reset zoom -->
+                        <Button Content="⊡" FontSize="14" Foreground="#94A3B8"
+                                Theme="{StaticResource ViewerButton}"
+                                Padding="8,2" Click="ZoomReset_Click"
+                                ToolTip.Tip="Reset zoom"/>
+                        <!-- Close -->
+                        <Button Content="✕" FontSize="14" Foreground="#EF4444"
+                                Theme="{StaticResource ViewerButton}"
+                                Padding="8,2" Click="Close_Click"
+                                ToolTip.Tip="Close  (Esc)"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Image area with scroll/zoom (wheel handled in code, before the ScrollViewer) -->
+                <ScrollViewer x:Name="ImageScroller" Grid.Row="1"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              Margin="12,10">
+                    <Image x:Name="MainImage"
+                           Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           RenderTransformOrigin="0,0">
+                        <Image.RenderTransform>
+                            <ScaleTransform/>
+                        </Image.RenderTransform>
+                    </Image>
+                </ScrollViewer>
+
+                <!-- Navigation row (prev / filename / next) -->
+                <Grid Grid.Row="2" Margin="16,8,16,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="◀" FontSize="14" Foreground="#94A3B8"
+                            Theme="{StaticResource ViewerButton}"
+                            Padding="8,4" Click="Prev_Click"
+                            x:Name="PrevBtn" IsEnabled="False"/>
+
+                    <TextBlock Grid.Column="1" x:Name="FileLabel"
+                               FontSize="11" Foreground="#64748B"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <Button Grid.Column="2" Content="▶" FontSize="14" Foreground="#94A3B8"
+                            Theme="{StaticResource ViewerButton}"
+                            Padding="8,4" Click="Next_Click"
+                            x:Name="NextBtn" IsEnabled="False"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

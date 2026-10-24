@@ -4,9 +4,11 @@ using Tasky.Services;
 
 namespace Tasky.Helpers;
 
-/// <summary>Opens files in their default Windows app without ever crashing Tasky.</summary>
+/// <summary>Opens files in their default app (Windows or macOS) without ever crashing Tasky.</summary>
 public static class FileLauncher
 {
+    private static string OsName => OperatingSystem.IsMacOS() ? "macOS" : "Windows";
+
     public static void Open(string path)
     {
         if (!File.Exists(path))
@@ -23,7 +25,7 @@ public static class FileLauncher
             // Typically "no application is associated" or the file is blocked.
             CrashLog.Write("Could not open attachment", ex);
             InAppNotificationService.Warning(
-                $"Windows has no app set up to open \"{Path.GetFileName(path)}\".");
+                $"{OsName} has no app set up to open \"{Path.GetFileName(path)}\".");
         }
     }
 }

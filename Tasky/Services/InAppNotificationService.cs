@@ -1,7 +1,4 @@
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Threading;
+using Avalonia.Threading;
 
 namespace Tasky.Services;
 
@@ -22,14 +19,11 @@ public static class InAppNotificationService
     public static void Warning(string message, string _) => Warning(message);
     public static void Error(string message,   string _) => Error(message);
 
-    private static DispatcherTimer? _hideTimer;
-
     private static void Show(string message, string accentHex, string icon)
     {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (Application.Current.MainWindow is not MainWindow mw) return;
-            mw.ShowInAppNotification(message, accentHex, icon);
-        });
+        void ShowOnMainWindow() => App.MainAppWindow?.ShowInAppNotification(message, accentHex, icon);
+
+        if (Dispatcher.UIThread.CheckAccess()) ShowOnMainWindow();
+        else Dispatcher.UIThread.Post(ShowOnMainWindow);
     }
 }

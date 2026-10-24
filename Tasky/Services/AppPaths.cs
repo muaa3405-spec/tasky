@@ -14,10 +14,18 @@ public static class AppPaths
     private static readonly string? OverrideRoot =
         Environment.GetEnvironmentVariable(DataRootOverrideVariable) is { Length: > 0 } root ? root : null;
 
-    /// <summary>User data: database, settings, attachments (%AppData%\Tasky).</summary>
+    /// <summary>Where the OS keeps per-user application data.</summary>
+    private static string UserDataRoot => OperatingSystem.IsMacOS()
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support")
+        : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+    /// <summary>
+    /// User data: database, settings, attachments
+    /// (%AppData%\Tasky on Windows, ~/Library/Application Support/Tasky on macOS).
+    /// </summary>
     public static string DataFolder { get; } = OverrideRoot is not null
         ? Path.Combine(OverrideRoot, "Roaming", "Tasky")
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tasky");
+        : Path.Combine(UserDataRoot, "Tasky");
 
     public static string DatabaseFile      => Path.Combine(DataFolder, DatabaseFileName);
     public static string SettingsFile      => Path.Combine(DataFolder, SettingsFileName);
@@ -27,10 +35,16 @@ public static class AppPaths
     public const string SettingsFileName      = "settings.json";
     public const string AttachmentsFolderName = "Attachments";
 
-    /// <summary>Machine-local working files: logs, import staging, safety copies (%LocalAppData%\Tasky).</summary>
+    /// <summary>
+    /// Machine-local working files: logs, import staging, safety copies
+    /// (%LocalAppData%\Tasky on Windows, ~/Library/Application Support/Tasky Local on macOS).
+    /// Never inside <see cref="DataFolder"/>, because an import swaps that whole folder.
+    /// </summary>
     public static string LocalFolder { get; } = OverrideRoot is not null
         ? Path.Combine(OverrideRoot, "Local", "Tasky")
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tasky");
+        : OperatingSystem.IsMacOS()
+            ? Path.Combine(UserDataRoot, "Tasky Local")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tasky");
 
     public static string LogsFolder          => Path.Combine(LocalFolder, "logs");
     public static string PendingImportFolder => Path.Combine(LocalFolder, "pending-import");

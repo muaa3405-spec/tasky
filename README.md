@@ -6,11 +6,11 @@
 
 <p align="center">
   <strong>Your tasks. Your time. Your computer. Nobody else's business.</strong><br>
-  A private, offline task manager and time tracker for Windows. No account, no cloud, no internet required.
+  A private, offline task manager and time tracker for Windows and macOS. No account, no cloud, no internet required.
 </p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20%7C%20macOS%2012%2B-0078D6">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-22C55E">
   <img alt="Offline" src="https://img.shields.io/badge/works-100%25%20offline-F59E0B">
@@ -20,7 +20,7 @@
 
 ## What is Tasky?
 
-Tasky is a small desktop app that sits in your system tray and keeps track of
+Tasky is a small desktop app that sits in your system tray (or the macOS menu bar) and keeps track of
 **everything you want to get done**: work projects, personal errands, habits,
 goals. It also shows **where your time actually goes**.
 
@@ -33,7 +33,7 @@ Wi-Fi drops.
 Most task apps want you to sign up, sync to their cloud and pay monthly, and
 they hold your data. Tasky takes the opposite approach:
 
-- 🔒 **Private by design.** Everything is stored in a local database on your own PC.
+- 🔒 **Private by design.** Everything is stored in a local database on your own computer.
   No telemetry, no analytics, no servers.
 - 📴 **No internet needed.** Tasky never connects to the internet. It works on a
   plane, behind a firewall, anywhere.
@@ -47,7 +47,7 @@ they hold your data. Tasky takes the opposite approach:
 ## Features
 
 ### ✅ Tasks
-- **One-click add** from the main window, or **Win + Shift + T** from anywhere
+- **One-click add** from the main window, or **Win + Shift + T** (macOS: **Control + Option + T**) from anywhere
 - Title, description, due date and **task numbers** (`#012`) for quick reference
 - **Groups** with colours (Work, Personal, Health… whatever you like) and one-click group filters
 - **Today / This Week / All** views, plus instant search by title, number or description
@@ -75,11 +75,11 @@ they hold your data. Tasky takes the opposite approach:
 - Quick notes with **tags** and full-text search, for ideas, how-tos and snippets
 - One-click copy of a note's text
 - **Attach files to notes**: screenshots, PDFs, documents, anything. Add them from the
-  note, paste with **Ctrl + V** or drag and drop. Notes with files show a 📎 count in the list
+  note, paste with **Ctrl + V** (macOS: **⌘ V**) or drag and drop. Notes with files show a 📎 count in the list
 
 ### 📎 Attachments
 - Attach files to **tasks and notes**
-- Paste screenshots with **Ctrl + V**, drag and drop files, or pick them from disk
+- Paste screenshots with **Ctrl + V** (macOS: **⌘ V**), drag and drop files, or pick them from disk
 - Built-in image viewer with next/previous; other files open in their default app
 
 ### 📊 Personal progress reports
@@ -89,7 +89,7 @@ they hold your data. Tasky takes the opposite approach:
 - **Top tasks by time**, to see where your hours really go
 - **Meeting hours**, detected automatically when a calling app (Teams, Zoom, Skype,
   Webex, Slack, Discord, Google Meet…) is actively using your microphone or camera.
-  No calendar access or sign-in needed.
+  No calendar access or sign-in needed. (Windows only.)
 - **App usage**, showing which apps you spend your day in
 
 ### 💻 Migrate to another computer
@@ -103,7 +103,7 @@ they hold your data. Tasky takes the opposite approach:
 ### 🎉 Small things that make it nice
 - A celebration with confetti when you finish a task, plus a shareable "completed" banner
   (saved to your Desktop and copied to the clipboard)
-- **Dark and light themes** that follow your Windows setting automatically
+- **Dark and light themes** that follow your Windows or macOS setting automatically
 - Lives quietly in the **system tray**, and opening it again just brings the window forward
 
 ## Getting started
@@ -133,7 +133,8 @@ See [BUILD.md](BUILD.md) for building the installer with Inno Setup.
 
 ## Where your data lives
 
-Everything stays inside your Windows user profile. Nothing is ever uploaded.
+Everything stays inside your user profile. Nothing is ever uploaded. On macOS the same files live in
+`~/Library/Application Support/Tasky/` (logs and safety copies in `~/Library/Application Support/Tasky Local/`).
 
 | What | Location |
 |------|----------|
@@ -144,14 +145,14 @@ Everything stays inside your Windows user profile. Nothing is ever uploaded.
 | Error logs | `%LocalAppData%\Tasky\logs\` |
 | Safety copy made before an import | `%LocalAppData%\Tasky\before-import\` |
 
-These folders are readable only by your Windows account (and administrators).
+These folders are readable only by your user account (and administrators).
 **Remove all data** by deleting `%AppData%\Tasky`.
 
 ### What gets recorded on your PC
 
 To power the reports, Tasky also keeps two local logs:
 
-- **Meeting detection** checks every 30 seconds whether a calling app is actively
+- **Meeting detection** (Windows) checks every 30 seconds whether a calling app is actively
   using your microphone or camera, and records only the start and end time of each
   meeting. It never records audio or video.
 - **App usage** records which app is in the foreground (by app name, not what's
@@ -174,7 +175,8 @@ Good to know:
   A wrong password or a damaged or edited file is refused.
 - **Importing replaces the data on that PC.** Whatever Tasky had there before is kept as a
   safety copy in `%LocalAppData%\Tasky\before-import\`.
-- Attachments keep working even if your Windows user name is different on the new PC.
+- Attachments keep working even if your user name is different on the new computer, and you can
+  move between Windows and macOS in either direction.
 
 ## Contributing
 

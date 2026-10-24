@@ -4,7 +4,7 @@ namespace Tasky.Services;
 
 /// <summary>
 /// Background service that checks due reminders every 1 minute and fires
-/// Windows toast notifications. Advances NextFireTime for repeating reminders.
+/// reminder notifications. Advances NextFireTime for repeating reminders.
 /// </summary>
 public class ReminderSchedulerService
 {
@@ -43,7 +43,7 @@ public class ReminderSchedulerService
                 _db.InsertMissedNotification(reminder.TaskId, reminder.TaskTitle);
 
                 // Immediately bump the badge count on the UI thread
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     App.ViewModel?.RefreshMissedNotifCount());
 
                 // Advance or delete

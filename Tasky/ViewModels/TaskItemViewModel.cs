@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows.Threading;
+using Avalonia.Media;
+using Avalonia.Media.Immutable;
+using Avalonia.Threading;
 using Tasky.Models;
 
 namespace Tasky.ViewModels;
@@ -43,13 +45,13 @@ public class TaskItemViewModel : INotifyPropertyChanged
     public int? GroupId
     {
         get => _model.GroupId;
-        set { _model.GroupId = value; OnPropertyChanged(); OnPropertyChanged(nameof(GroupBadge)); OnPropertyChanged(nameof(GroupColor)); }
+        set { _model.GroupId = value; OnPropertyChanged(); OnPropertyChanged(nameof(GroupBadge)); OnPropertyChanged(nameof(GroupBrush)); }
     }
 
     public RecurrenceType Recurrence
     {
         get => _model.Recurrence;
-        set { _model.Recurrence = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecurrenceDisplay)); }
+        set { _model.Recurrence = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecurrenceDisplay)); OnPropertyChanged(nameof(RecurrenceBrush)); }
     }
 
     /// <summary>Label shown on the task card for recurring tasks. Empty for non-recurring.</summary>
@@ -61,14 +63,19 @@ public class TaskItemViewModel : INotifyPropertyChanged
         _                      => string.Empty
     };
 
-    /// <summary>Badge background colour per recurrence frequency (WPF Color for direct XAML binding).</summary>
-    public System.Windows.Media.Color RecurrenceHex => _model.Recurrence switch
+    /// <summary>Badge background per recurrence frequency.</summary>
+    public IBrush RecurrenceBrush => _model.Recurrence switch
     {
-        RecurrenceType.Daily   => System.Windows.Media.Color.FromRgb(124,  58, 237),  // violet
-        RecurrenceType.Weekly  => System.Windows.Media.Color.FromRgb( 13, 148, 136),  // teal
-        RecurrenceType.Monthly => System.Windows.Media.Color.FromRgb(  3, 105, 161),  // blue
-        _                      => System.Windows.Media.Color.FromRgb(107, 114, 128)
+        RecurrenceType.Daily   => RecurrenceDaily,
+        RecurrenceType.Weekly  => RecurrenceWeekly,
+        RecurrenceType.Monthly => RecurrenceMonthly,
+        _                      => GrayBrush
     };
+
+    private static readonly IBrush RecurrenceDaily   = new ImmutableSolidColorBrush(Color.FromRgb(124,  58, 237));  // violet
+    private static readonly IBrush RecurrenceWeekly  = new ImmutableSolidColorBrush(Color.FromRgb( 13, 148, 136));  // teal
+    private static readonly IBrush RecurrenceMonthly = new ImmutableSolidColorBrush(Color.FromRgb(  3, 105, 161));  // blue
+    private static readonly IBrush GrayBrush         = new ImmutableSolidColorBrush(Color.FromRgb(107, 114, 128));
 
     /// <summary>Group name shown in the badge. Empty = no group assigned.</summary>
     public string GroupBadge
@@ -81,18 +88,15 @@ public class TaskItemViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Hex colour of the group, used as badge background. Falls back to gray.</summary>
-    public System.Windows.Media.Color GroupColor
+    /// <summary>Colour of the group, used as the card strip. Falls back to gray.</summary>
+    public IBrush GroupBrush
     {
         get
         {
-            if (!_model.GroupId.HasValue) return System.Windows.Media.Colors.Transparent;
-            if (GroupsLookup.TryGetValue(_model.GroupId.Value, out var g))
-            {
-                try { return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(g.Color); }
-                catch { }
-            }
-            return System.Windows.Media.Color.FromRgb(107, 114, 128); // gray fallback
+            if (!_model.GroupId.HasValue) return Brushes.Transparent;
+            if (GroupsLookup.TryGetValue(_model.GroupId.Value, out var g) && Color.TryParse(g.Color, out var c))
+                return new ImmutableSolidColorBrush(c);
+            return GrayBrush;
         }
     }
 
@@ -100,14 +104,14 @@ public class TaskItemViewModel : INotifyPropertyChanged
     public void RefreshDateLabels()
     {
         OnPropertyChanged(nameof(DueDateTag));
-        OnPropertyChanged(nameof(DueDateColor));
+        OnPropertyChanged(nameof(DueDateBrush));
         OnPropertyChanged(nameof(CompletedGroup));
     }
 
     public void RefreshGroupBadge()
     {
         OnPropertyChanged(nameof(GroupBadge));
-        OnPropertyChanged(nameof(GroupColor));
+        OnPropertyChanged(nameof(GroupBrush));
     }
 
     /// <summary>Shared lookup from MainViewModel — populated when groups load.</summary>
@@ -139,7 +143,7 @@ public class TaskItemViewModel : INotifyPropertyChanged
     public DateTime? DueDate
     {
         get => _model.DueDate;
-        set { _model.DueDate = value; OnPropertyChanged(); OnPropertyChanged(nameof(DueDateTag)); OnPropertyChanged(nameof(DueDateColor)); }
+        set { _model.DueDate = value; OnPropertyChanged(); OnPropertyChanged(nameof(DueDateTag)); OnPropertyChanged(nameof(DueDateBrush)); }
     }
 
     public string DueDateTag
@@ -157,18 +161,21 @@ public class TaskItemViewModel : INotifyPropertyChanged
         }
     }
 
-    public string DueDateColor
+    public IBrush DueDateBrush
     {
         get
         {
-            if (!_model.DueDate.HasValue) return "#6B7280";
+            if (!_model.DueDate.HasValue) return GrayBrush;
             var d = _model.DueDate.Value.Date;
             var today = DateTime.Today;
-            if (d < today)  return "#EF4444";
-            if (d == today) return "#22C55E";
-            return "#6B7280";
+            if (d < today)  return OverdueBrush;
+            if (d == today) return DueTodayBrush;
+            return GrayBrush;
         }
     }
+
+    private static readonly IBrush OverdueBrush  = new ImmutableSolidColorBrush(Color.Parse("#EF4444"));
+    private static readonly IBrush DueTodayBrush = new ImmutableSolidColorBrush(Color.Parse("#22C55E"));
 
     public DateTime? CompletedAt
     {
