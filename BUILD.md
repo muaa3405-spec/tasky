@@ -141,7 +141,7 @@ OS works differently:
 | Reminder sounds | Windows Media sounds | Built-in macOS alert sounds (Glass, Ping…) |
 | Meeting hours | Detected from microphone / camera use | Not available, so the Meeting cards are hidden |
 | App usage | Foreground window, including browser web apps | Frontmost application |
-| Emoji icons | Single-colour outlines (as always) | Apple's colour emoji |
+| Emoji icons | Single-colour outlines from Segoe UI Emoji (as always) | Single-colour outlines from the bundled Noto Emoji (same colours; slightly different drawings) |
 | Close button | Hides to the tray | Hides; click the Dock or menu-bar icon to bring it back |
 
 ---

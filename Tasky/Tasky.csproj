@@ -37,6 +37,9 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\icon.ico" />
     <AvaloniaResource Include="Assets\tasky-logo.png" />
+    <!-- macOS emoji icons: single-colour Noto Emoji (SIL Open Font License, see OFL-NotoEmoji.txt) -->
+    <AvaloniaResource Include="Assets\Fonts\NotoEmoji-Variable.ttf" />
+    <None Include="Assets\Fonts\OFL-NotoEmoji.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\notification-banner.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
