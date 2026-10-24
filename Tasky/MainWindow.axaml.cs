@@ -1,0 +1,1678 @@
+using System.IO;
+using Avalonia;
+using Avalonia.Animation.Easings;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Tasky.Behaviors;
+using Tasky.Dialogs;
+using Tasky.Helpers;
+using Tasky.Models;
+using Tasky.Platform;
+using Tasky.Services;
+using Tasky.ViewModels;
+
+namespace Tasky;
+
+public partial class MainWindow : Window
+{
+    private ISystemTray? _trayIcon;
+    private bool _exiting;
+    private bool _addPanelOpen;
+    private string _completedGroupFilter = "All";
+    private string _topTasksFilter = "overall";
+    private bool _addNotePanelOpen;
+    private int _statsWeekOffset = 0;
+    private bool _weeklyChartShowTime = true;
+    private string _meetingFilter = "week";
+    private string _appUsageFilter = "today";
+
+    // Pending attachments buffered while the Add Task form is open
+    private readonly List<(byte[] Data, string Ext)> _pendingAttachBytes = new();
+    private readonly List<string>                    _pendingAttachPaths  = new();
+    private MainViewModel Vm => (MainViewModel)DataContext!;
+
+    private static readonly TimeSpan PageAnimation = TimeSpan.FromMilliseconds(250);
+
+    // Navigation
+
+    private enum AppPage { Main, Completed, Notes, Stats, Reminders, Settings, Trash }
+
+    private void NavigateTo(AppPage page)
+    {
+        TaskListPage.IsVisible   = page == AppPage.Main;
+        CompletedPage.IsVisible  = page == AppPage.Completed;
+        NotesPage.IsVisible      = page == AppPage.Notes;
+        StatsPage.IsVisible      = page == AppPage.Stats;
+        RemindersPage.IsVisible  = page == AppPage.Reminders;
+        SettingsPage.IsVisible   = page == AppPage.Settings;
+        TrashPage.IsVisible      = page == AppPage.Trash;
+        AddPanelBorder.IsVisible = page == AppPage.Main;
+        MainHeader.IsVisible     = page == AppPage.Main;
+        SubHeader.IsVisible      = page != AppPage.Main;
+
+        EmptyBinBtn.IsVisible    = page == AppPage.Trash;
+        NewNoteBtn.IsVisible     = page == AppPage.Notes;
+
+        SubPageTitle.Text = page switch
+        {
+            AppPage.Completed => "☑  Completed Tasks",
+            AppPage.Notes     => "\U0001F4DD  Notes",
+            AppPage.Stats     => "Stats",
+            AppPage.Reminders => "\U0001F514  Reminders",
+            AppPage.Settings  => "⚙  Settings",
+            AppPage.Trash     => "\U0001F5D1  Recycle Bin",
+            _                 => ""
+        };
+
+        if (page == AppPage.Trash)     RefreshTrashList();
+        if (page == AppPage.Completed) RefreshCompletedList();
+        if (page == AppPage.Notes)     { Vm.LoadNotes(); RefreshNotesEmpty(); }
+        if (page == AppPage.Stats)     { Vm.RefreshStats(_statsWeekOffset); BuildStatsUI(); }
+        if (page == AppPage.Reminders)
+        {
+            NotifPanel.IsVisible     = true;
+            UpcomingPanel.IsVisible  = false;
+            NotifTabBtn.IsChecked    = true;
+            UpcomingTabBtn.IsChecked = false;
+            RefreshRemindersPage();
+        }
+        if (page == AppPage.Settings) LoadSettingsPage();
+
+        AnimatePageIn(page);
+    }
+
+    private void AnimatePageIn(AppPage page)
+    {
+        Control? target = page switch
+        {
+            AppPage.Completed => CompletedPage,
+            AppPage.Notes     => NotesPage,
+            AppPage.Stats     => StatsPage,
+            AppPage.Reminders => RemindersPage,
+            AppPage.Settings  => SettingsPage,
+            AppPage.Trash     => TrashPage,
+            AppPage.Main      => TaskListPage,
+            _                 => null
+        };
+        if (target is null || !target.IsVisible) return;
+
+        var tt = new TranslateTransform(40, 0);
+        target.RenderTransform = tt;
+
+        var ease = new CubicEaseOut();
+        _ = Animator.Animate(tt, TranslateTransform.XProperty, 40, 0, PageAnimation, ease);
+        _ = Animator.Fade(target, 0, 1, PageAnimation, ease);
+    }
+
+    private void Back_Click(object? sender, RoutedEventArgs e)
+    {
+        Vm.CompletedSearch = string.Empty;
+        Vm.NoteSearch      = string.Empty;
+        Vm.TaskSearch      = string.Empty;
+        _addNotePanelOpen  = false;
+        AddNotePanel.IsVisible = false;
+        NavigateTo(AppPage.Main);
+    }
+
+    // Title bar theme (Windows draws it to match the header; macOS follows the app theme)
+
+    private void ApplyTitleBarTheme(bool dark) => PlatformServices.Chrome.ApplyThemeWithCaption(this, dark);
+
+    public void ApplyTitleBarThemePublic(bool dark) => ApplyTitleBarTheme(dark);
+
+    public void SyncThemeIcons(bool dark)
+    {
+        SubThemeIcon.Text = dark ? "☀️" : "\U0001F319";
+    }
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        Icon = new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
+            ? "avares://Tasky/Assets/icon.ico"
+            : "avares://Tasky/Assets/tasky-logo.png")));
+        ApplyPlatformTexts();
+        PopulateSoundPicker();
+        InitTrayIcon();
+
+        DescInputBox.AddHandler(KeyDownEvent, Desc_PreviewKeyDown, RoutingStrategies.Tunnel);
+        DescInputBox.AddHandler(DragDrop.DropEvent, Desc_Drop);
+        WeeklyChartScroll.AddHandler(PointerWheelChangedEvent, InnerScroll_PreviewMouseWheel, RoutingStrategies.Tunnel);
+        Closing += Window_Closing;
+
+        Opened += (_, _) =>
+        {
+            bool dark = App.Instance.IsDarkTheme;
+            ApplyTitleBarTheme(dark);
+            SyncThemeIcons(dark);
+        };
+        Loaded += (_, _) =>
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MainViewModel.CompletedSearch) && CompletedPage.IsVisible)
+                        RefreshCompletedList();
+                    if (e.PropertyName == nameof(MainViewModel.NoteSearch) && NotesPage.IsVisible)
+                        RefreshNotesEmpty();
+                };
+                vm.LoadGroups();
+                BuildGroupChips();
+                PopulateNewTaskGroupPicker();
+                vm.RefreshMissedNotifCount();
+            }
+
+            // Auto-refresh every 10 minutes so due-date labels (Today/Tomorrow/Yesterday)
+            // and sort order stay accurate without needing to restart the app.
+            var autoRefresh = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
+            autoRefresh.Tick += (_, _) => AutoRefresh();
+            autoRefresh.Start();
+        };
+    }
+
+    /// <summary>The few texts that name the operating system.</summary>
+    private void ApplyPlatformTexts()
+    {
+        // Meeting detection reads Windows audio sessions; macOS has no equivalent, so its cards are hidden there.
+        MeetingHoursCard.IsVisible   = PlatformServices.SupportsMeetingDetection;
+        MeetingHistoryCard.IsVisible = PlatformServices.SupportsMeetingDetection;
+        if (!OperatingSystem.IsMacOS()) return;
+        AppUsageSubtitle.Text = "Time spent in each Mac application  ·  top 10";
+        MigrateSubtitle.Text  = "Export everything to one password-protected file, or import it on a new computer";
+    }
+
+    private void PopulateSoundPicker()
+    {
+        foreach (var sound in PlatformServices.Sounds.Options)
+            SettingTune.Items.Add(new ComboBoxItem { Content = sound.Label, Tag = sound.Tag });
+        SettingTune.SelectedIndex = PlatformServices.Sounds.Options.ToList()
+            .FindIndex(s => s.Tag == SoundTags.Default);
+    }
+
+    // ─── Auto-refresh (every 10 min) ─────────────────────────────────────────
+    // Keeps due-date labels (Today/Tomorrow/Yesterday) and the date filters
+    // current. Tasks are refreshed in place — never reloaded — so running
+    // timers, the widget and any open dialog keep working on the same objects.
+    private void AutoRefresh()
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        vm.PurgeExpiredDeletedTasks();   // honour the 30-day recycle-bin retention
+        vm.RefreshTimeSensitiveLabels();
+        vm.RefreshMissedNotifCount();
+
+        // Keep the new-task date picker current across midnight
+        vm.NewDueDate = DateTime.Today;
+
+        // If a page that shows time-sensitive data is open, refresh it too
+        if (TrashPage.IsVisible)     { vm.LoadDeletedTasks(); RefreshTrashList(); }
+        if (CompletedPage.IsVisible) RefreshCompletedList();
+        if (StatsPage.IsVisible)     { vm.RefreshStats(_statsWeekOffset); BuildStatsUI(); }
+        if (RemindersPage.IsVisible) RefreshRemindersPage();
+    }
+
+    // Group chips
+
+    private static Color GroupDotColor(TaskGroup g)
+        => Color.TryParse(g.Color, out var c) ? c : Color.FromRgb(107, 114, 128);
+
+    private void BuildGroupChips()
+    {
+        GroupChipsPanel.Children.Clear();
+
+        var allChip = new RadioButton
+        {
+            Content   = "All",
+            Theme     = UiResources.Theme("FilterChip"),
+            GroupName = "GF",
+            IsChecked = Vm.SelectedGroupFilter == null,
+            Margin    = new Thickness(0, 0, 5, 0)
+        };
+        allChip.Click += (_, _) => Vm.SelectedGroupFilter = null;
+        GroupChipsPanel.Children.Add(allChip);
+
+        foreach (var g in Vm.Groups)
+        {
+            // Build chip content: coloured 8px dot + group name
+            var dot = new Avalonia.Controls.Shapes.Ellipse
+            {
+                Width  = 8, Height = 8,
+                Fill   = new SolidColorBrush(GroupDotColor(g)),
+                Margin = new Thickness(0, 0, 5, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var label = new TextBlock
+            {
+                Text = g.Name,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children = { dot, label }
+            };
+
+            var chip = new RadioButton
+            {
+                Content   = content,
+                Theme     = UiResources.Theme("FilterChip"),
+                GroupName = "GF",
+                IsChecked = Vm.SelectedGroupFilter == g.Id,
+                Margin    = new Thickness(0, 0, 5, 0),
+                Tag       = g.Id
+            };
+            int gid = g.Id;
+            chip.Click += (_, _) => Vm.SelectedGroupFilter = gid;
+            GroupChipsPanel.Children.Add(chip);
+        }
+
+        GroupFilterScroll.IsVisible = Vm.Groups.Count > 0;
+    }
+
+    private void PopulateNewTaskGroupPicker()
+    {
+        NewTaskGroupPicker.Items.Clear();
+
+        int selectIndex = 0;
+        int i = 0;
+        foreach (var g in Vm.Groups)
+        {
+            var dot = new Avalonia.Controls.Shapes.Ellipse
+            {
+                Width  = 8, Height = 8,
+                Fill   = new SolidColorBrush(GroupDotColor(g)),
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var label = new TextBlock { Text = g.Name, VerticalAlignment = VerticalAlignment.Center };
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            panel.Children.Add(dot);
+            panel.Children.Add(label);
+
+            NewTaskGroupPicker.Items.Add(new ComboBoxItem { Content = panel, Tag = (int?)g.Id });
+
+            // Pre-select whichever group matches the VM default (set by LoadGroups)
+            if ((int?)g.Id == Vm.NewTaskGroupId) selectIndex = i;
+            i++;
+        }
+        NewTaskGroupPicker.SelectedIndex = selectIndex;
+    }
+
+    private void NewTaskGroup_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not MainViewModel) return;
+        if (sender is ComboBox cb && cb.SelectedItem is ComboBoxItem ci)
+            Vm.NewTaskGroupId = ci.Tag as int?;
+    }
+
+    private void NewTaskRecurrence_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not MainViewModel) return;
+        if (sender is ComboBox cb && cb.SelectedItem is ComboBoxItem ci
+            && ci.Tag is string s && int.TryParse(s, out int v))
+            Vm.NewTaskRecurrence = (RecurrenceType)v;
+    }
+
+    // System Tray
+
+    private void InitTrayIcon()
+    {
+        _trayIcon = PlatformServices.CreateTray();
+        _trayIcon.OpenRequested += ShowFromTray;
+        _trayIcon.Show("Tasky - Task Manager",
+        [
+            new TrayMenuItem("Open Tasky", ShowFromTray),
+            new TrayMenuItem("Quick Add",  OpenQuickAdd),
+            TrayMenuItem.Separator,
+            new TrayMenuItem("Exit Tasky", ExitApp)
+        ]);
+    }
+
+    public void ShowFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    public void ShowBalloonReminder(string title, string message)
+        => _trayIcon?.ShowBalloon(title, message, TimeSpan.FromSeconds(8));
+
+    public void DisposeTray()
+    {
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+    }
+
+    // ─── Dim + blur overlay for modal dialogs ─────────────────────────────
+
+    /// <summary>
+    /// Blurs the window content and darkens it. Call before showing a dialog,
+    /// then HideDimOverlay() when it closes.
+    /// </summary>
+    private static readonly BlurEffect _blur = new() { Radius = 6 };
+
+    private void ShowDimOverlay()
+    {
+        // Blur only the content panels — NOT RootGrid, so InAppNotifBorder stays crisp on top
+        MainHeader.Effect      = _blur;
+        AddPanelBorder.Effect  = _blur;
+        PageContainer.Effect   = _blur;
+        DimOverlay.IsVisible   = true;
+    }
+
+    private void HideDimOverlay()
+    {
+        DimOverlay.IsVisible   = false;
+        MainHeader.Effect      = null;
+        AddPanelBorder.Effect  = null;
+        PageContainer.Effect   = null;
+    }
+
+    /// <summary>Shows a dialog modally with blur/dim so every dialog gets the same backdrop.</summary>
+    private async Task<bool?> ShowModalDialog(Window dlg)
+    {
+        ShowDimOverlay();
+        try   { return await dlg.ShowDialog<bool?>(this); }
+        finally { HideDimOverlay(); }
+    }
+
+    // ─── In-app notification overlay ─────────────────────────────────────
+
+    private DispatcherTimer? _notifTimer;
+
+    public void ShowInAppNotification(string message, string accentHex, string icon)
+    {
+        // Set content
+        NotifIcon.Text    = icon;
+        NotifMessage.Text = message;
+
+        // Set accent colour + tinted background
+        if (Color.TryParse(accentHex, out var col))
+        {
+            NotifAccent.Background = new SolidColorBrush(col);
+
+            // Dark-tinted background based on accent (green/amber/blue/red)
+            var bgHex = accentHex.ToUpperInvariant() switch
+            {
+                "#22C55E" or "#34D399" => "#052E16",  // success → dark green
+                "#F59E0B" or "#FCD34D" => "#451A03",  // warning → dark amber
+                "#EF4444" or "#F87171" => "#3B0A0A",  // error   → dark red
+                _                      => "#1E3A5F",  // default → dark blue
+            };
+            NotifMainBorder.Background = new SolidColorBrush(Color.Parse(bgHex));
+        }
+        else NotifAccent.Background = Brushes.Gray;
+
+        // Fade in
+        InAppNotifBorder.IsVisible = true;
+        _ = Animator.Fade(InAppNotifBorder, 0, 1, TimeSpan.FromMilliseconds(200));
+
+        // Auto-dismiss after 3 s
+        _notifTimer?.Stop();
+        _notifTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _notifTimer.Tick += async (_, _) =>
+        {
+            _notifTimer.Stop();
+            if (await Animator.Fade(InAppNotifBorder, 1, 0, TimeSpan.FromMilliseconds(250)))
+                InAppNotifBorder.IsVisible = false;
+        };
+        _notifTimer.Start();
+    }
+
+    private void OpenQuickAdd() => App.ShowQuickAdd();
+
+    private void ExitApp()
+    {
+        _exiting = true;
+        DisposeTray();
+        App.Shutdown();
+    }
+
+    // Window events
+
+    private void Window_Closing(object? sender, WindowClosingEventArgs e)
+    {
+        // Quitting (tray Exit, macOS Quit, log-off) really closes; the close button only hides.
+        if (_exiting || e.CloseReason != WindowCloseReason.WindowClosing) return;
+        e.Cancel = true;
+        Hide();
+        _trayIcon?.ShowBalloon("Tasky", "Running in background. Double-click to restore.", TimeSpan.FromSeconds(2));
+    }
+
+    // Header buttons
+
+    private void ThemeToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        var app = App.Instance;
+        app.ToggleTheme();
+        bool dark = app.IsDarkTheme;
+        SyncThemeIcons(dark);
+        ApplyTitleBarTheme(dark);
+    }
+
+    private void Completed_Click(object? sender, RoutedEventArgs e)  => NavigateTo(AppPage.Completed);
+    private void Notes_Click(object? sender, RoutedEventArgs e)      => NavigateTo(AppPage.Notes);
+    private void Stats_Click(object? sender, RoutedEventArgs e)      { Vm.RefreshStats(_statsWeekOffset); NavigateTo(AppPage.Stats); }
+    private void Reminders_Click(object? sender, RoutedEventArgs e)  => NavigateTo(AppPage.Reminders);
+
+    // ─── Reminders page ───────────────────────────────────────────────────
+
+    /// <summary>Flat view-model used by the reminders ItemsControl.</summary>
+    private sealed class ReminderRow
+    {
+        public int    Id               { get; init; }
+        public string TaskTitle        { get; init; } = string.Empty;
+        public string TaskIdDisplay    { get; init; } = string.Empty;
+        public string FireDisplay      { get; init; } = string.Empty;
+        public string FrequencyDisplay { get; init; } = string.Empty;
+    }
+
+    private sealed class MissedNotifRow
+    {
+        public int    Id             { get; init; }
+        public int    TaskId         { get; init; }
+        public string TaskTitle      { get; init; } = string.Empty;
+        public string TaskIdDisplay  { get; init; } = string.Empty;
+        public string FiredAtDisplay { get; init; } = string.Empty;
+        public bool   IsRead         { get; init; }
+    }
+
+    private void RefreshRemindersPage()
+    {
+        // All notifications (unread first, then read/faded)
+        var all = App.Database!.GetMissedNotifications()
+            .Select(m => new MissedNotifRow
+            {
+                Id             = m.Id,
+                TaskId         = m.TaskId,
+                TaskTitle      = m.TaskTitle,
+                TaskIdDisplay  = $"#{m.TaskId:D3}",
+                FiredAtDisplay = m.FiredAt.Date == DateTime.Today
+                    ? $"Today {m.FiredAt:HH:mm}"
+                    : $"{m.FiredAt:MMM d, HH:mm}",
+                IsRead         = m.IsRead
+            })
+            .ToList();
+
+        var unread = all.Where(r => !r.IsRead).ToList();
+        var read   = all.Where(r =>  r.IsRead).ToList();
+
+        MissedList.ItemsSource       = unread;
+        ReadList.ItemsSource         = read;
+        MissedSection.IsVisible      = unread.Count > 0;
+        ReadSection.IsVisible        = read.Count   > 0;
+        NotifEmptyLabel.IsVisible    = unread.Count == 0 && read.Count == 0;
+        Vm.MissedNotifCount          = unread.Count;
+
+        // Upcoming reminders — nearest first
+        var reminders = App.Database!.GetAllReminders()
+            .Where(r => r.NextFireTime > DateTime.Now)
+            .OrderBy(r => r.NextFireTime)
+            .Select(r => new ReminderRow
+            {
+                Id               = r.Id,
+                TaskTitle        = r.TaskTitle,
+                TaskIdDisplay    = $"#{r.TaskId:D3}",
+                FireDisplay      = r.NextFireTime.ToString("MMM d, yyyy  HH:mm"),
+                FrequencyDisplay = BuildFreqLabel(r)
+            })
+            .ToList();
+
+        RemindersList.ItemsSource     = reminders;
+        RemindersEmptyLabel.IsVisible = reminders.Count == 0;
+    }
+
+    private void NotifTab_Click(object? sender, RoutedEventArgs e)
+    {
+        NotifPanel.IsVisible    = true;
+        UpcomingPanel.IsVisible = false;
+    }
+
+    private void UpcomingTab_Click(object? sender, RoutedEventArgs e)
+    {
+        NotifPanel.IsVisible    = false;
+        UpcomingPanel.IsVisible = true;
+    }
+
+    private async void MissedNotif_Click(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!IsLeftClick(e) || sender is not Control { DataContext: MissedNotifRow row }) return;
+        // Mark as read (moves to faded "Read" section) instead of deleting
+        App.Database!.MarkMissedNotificationRead(row.Id);
+        RefreshRemindersPage();
+        // Open task detail
+        if (FindTask(row.TaskId) is { } vm) await OpenTaskDetail(vm);
+    }
+
+    private async void ReadNotif_Click(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!IsLeftClick(e) || sender is not Control { DataContext: MissedNotifRow row }) return;
+        if (FindTask(row.TaskId) is { } vm) await OpenTaskDetail(vm);
+    }
+
+    private TaskItemViewModel? FindTask(int taskId)
+        => Vm.Tasks.FirstOrDefault(t => t.Id == taskId)
+        ?? Vm.CompletedTasks.FirstOrDefault(t => t.Id == taskId);
+
+    private void DismissMissedNotif_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: int id }) return;
+        App.Database!.DeleteMissedNotification(id);
+        RefreshRemindersPage();
+    }
+
+    private static string BuildFreqLabel(ReminderItem r)
+    {
+        if (r.Frequency == ReminderFrequency.Weekly && r.TargetDayOfWeek.HasValue)
+        {
+            var day = System.Globalization.CultureInfo.CurrentCulture
+                .DateTimeFormat.GetDayName((DayOfWeek)r.TargetDayOfWeek.Value);
+            return $"Every {day}";
+        }
+        if (r.Frequency == ReminderFrequency.Monthly && r.DayOfMonth.HasValue)
+        {
+            string suffix = (r.DayOfMonth.Value % 100) switch
+            {
+                11 or 12 or 13 => "th",
+                _ => (r.DayOfMonth.Value % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" }
+            };
+            return $"{r.DayOfMonth}{suffix} of month";
+        }
+        return r.Frequency switch
+        {
+            ReminderFrequency.Daily   => "Daily",
+            ReminderFrequency.Weekly  => "Weekly",
+            ReminderFrequency.Monthly => "Monthly",
+            _                         => "Once"
+        };
+    }
+
+    private async void DeleteReminder_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: int id }) return;
+        var dlg = new ConfirmDialog("Delete Reminder",
+            "Delete this reminder? The task will not be deleted.",
+            "Delete", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true)
+        {
+            App.Database!.DeleteReminder(id);
+            RefreshRemindersPage();
+            InAppNotificationService.Success("Reminder deleted.");
+        }
+    }
+
+    private async void Groups_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowModalDialog(new ManageGroupsDialog(Vm));
+        BuildGroupChips();
+        PopulateNewTaskGroupPicker();
+    }
+
+    private void Settings_Click(object? sender, RoutedEventArgs e) => NavigateTo(AppPage.Settings);
+
+    // ── Settings page ────────────────────────────────────────────────────────
+    private void LoadSettingsPage()
+    {
+        var s = App.Settings.Current;
+        SettingUserName.Text = s.UserName;
+
+        // Theme
+        ThemeDark.IsChecked  = s.Theme == "dark";
+        ThemeLight.IsChecked = s.Theme == "light";
+        ThemeAuto.IsChecked  = s.Theme == "auto";
+
+        // Tune
+        foreach (var item in SettingTune.Items.OfType<ComboBoxItem>())
+            if (item.Tag?.ToString() == s.NotifTune) { SettingTune.SelectedItem = item; break; }
+
+        // Accent color
+        AccentBlue.IsChecked   = s.NotifAccentColor == "#60A5FA";
+        AccentGreen.IsChecked  = s.NotifAccentColor == "#22C55E";
+        AccentOrange.IsChecked = s.NotifAccentColor == "#FB923C";
+        AccentPurple.IsChecked = s.NotifAccentColor == "#A78BFA";
+
+        // Dismiss
+        DismissPerm.IsChecked = s.NotifAutoDismissSecs == 0;
+        Dismiss15.IsChecked   = s.NotifAutoDismissSecs == 15;
+        Dismiss30.IsChecked   = s.NotifAutoDismissSecs == 30;
+        Dismiss60.IsChecked   = s.NotifAutoDismissSecs == 60;
+
+        // Task completion
+        CompletionPopupToggle.IsChecked = s.ShowCompletionPopup;
+        SaveScreenshotToggle.IsChecked  = s.SaveScreenshotToDesktop;
+    }
+
+    private void SettingUserName_Changed(object? sender, TextChangedEventArgs e)
+    {
+        App.Settings.Current.UserName = SettingUserName.Text ?? string.Empty;
+        App.Settings.Save();
+    }
+
+    private void ThemeSetting_Click(object? sender, RoutedEventArgs e)
+    {
+        var tag = (sender as RadioButton)?.Tag?.ToString() ?? "dark";
+        App.Settings.Current.Theme = tag;
+        App.Settings.Save();
+        var app = App.Instance;
+        bool dark = tag == "dark" || (tag == "auto" && app.IsDarkTheme);
+        if (tag == "light") dark = false;
+        app.ApplyTheme(dark);
+        ApplyTitleBarTheme(dark);
+        SyncThemeIcons(dark);
+    }
+
+    private string SelectedTuneTag => (SettingTune.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "notify";
+
+    private void SettingTune_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;   // the list is being filled
+        App.Settings.Current.NotifTune = SelectedTuneTag;
+        App.Settings.Save();
+    }
+
+    private void PreviewTune_Click(object? sender, RoutedEventArgs e)
+        => PlatformServices.Sounds.Play(SelectedTuneTag);
+
+    private void TestNotification_Click(object? sender, RoutedEventArgs e)
+    {
+        // Fire a real reminder toast so the user can verify their notification
+        // settings (sound, accent color, auto-dismiss) are working end-to-end.
+        if (App.Notifications is { } notifications)
+            notifications.SendReminder("This is a test reminder — your notifications are working!");
+        else
+            InAppNotificationService.Error("Notification service is not available.");
+    }
+
+    private void AccentColor_Click(object? sender, RoutedEventArgs e)
+    {
+        var tag = (sender as RadioButton)?.Tag?.ToString() ?? "#60A5FA";
+        App.Settings.Current.NotifAccentColor = tag;
+        App.Settings.Save();
+    }
+
+    private void DismissTime_Click(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as RadioButton)?.Tag?.ToString() is string t && int.TryParse(t, out int secs))
+        {
+            App.Settings.Current.NotifAutoDismissSecs = secs;
+            App.Settings.Save();
+        }
+    }
+
+    private void CompletionPopupToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        App.Settings.Current.ShowCompletionPopup = CompletionPopupToggle.IsChecked == true;
+        App.Settings.Save();
+    }
+
+    private void SaveScreenshotToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        App.Settings.Current.SaveScreenshotToDesktop = SaveScreenshotToggle.IsChecked == true;
+        App.Settings.Save();
+    }
+
+    // Add panel
+
+    private void AddToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        _addPanelOpen = !_addPanelOpen;
+        AddFormPanel.IsVisible = _addPanelOpen;
+        AddToggleBtn.Content   = _addPanelOpen ? "✕  Cancel" : "➕  New Task";
+        if (_addPanelOpen)
+        {
+            Vm.NewDueDate = DateTime.Today;  // always default to today when form opens
+            TitleInputBox.Focus();
+        }
+        else
+        {
+            // Cancelled — discard pending attachments
+            _pendingAttachBytes.Clear();
+            _pendingAttachPaths.Clear();
+            RebuildPendingAttachThumbs();
+        }
+    }
+
+    private void AddTask_Click(object? sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(Vm.NewTitle)) return;
+
+        Vm.AddTask();   // creates and sorts the task
+
+        // The newest task IS the one just added — find it by CreatedAt (most recent)
+        var newTask = Vm.Tasks.OrderByDescending(t => t.Model.CreatedAt).FirstOrDefault();
+        int pendingCount = _pendingAttachBytes.Count + _pendingAttachPaths.Count;
+        if (newTask != null && pendingCount > 0)
+        {
+            FlushPendingAttachments(newTask.Id);
+            InAppNotificationService.Success($"Task created with {pendingCount} attachment(s).");
+        }
+
+        _addPanelOpen          = false;
+        AddFormPanel.IsVisible = false;
+        AddToggleBtn.Content   = "➕  New Task";
+    }
+
+    private void TitleBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) AddTask_Click(this, new RoutedEventArgs());
+    }
+
+    // Filter chips
+
+    private void Filter_All_Click(object? sender, RoutedEventArgs e)      => Vm.ActiveFilter = TaskFilter.All;
+    private void Filter_Today_Click(object? sender, RoutedEventArgs e)    => Vm.ActiveFilter = TaskFilter.Today;
+    private void Filter_ThisWeek_Click(object? sender, RoutedEventArgs e) => Vm.ActiveFilter = TaskFilter.ThisWeek;
+
+    // Image paste / drop
+
+    private void Desc_PreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!KeyGestures.IsPaste(e)) return;
+        if (PlatformServices.Clipboard.ContainsImage() && PlatformServices.Clipboard.GetImagePng() is { } png)
+        {
+            e.Handled = true;
+            SaveClipboardImage(png);
+        }
+    }
+
+    private void Desc_Drop(object? sender, DragEventArgs e)
+    {
+        foreach (var f in DroppedFiles.From(e).Where(ImageFiles.IsImage)) SaveImageFile(f);
+    }
+
+    private void SaveClipboardImage(byte[] png)
+    {
+        // If the Add Task panel is open, buffer for the upcoming new task
+        if (_addPanelOpen && AddFormPanel.IsVisible)
+        {
+            _pendingAttachBytes.Add((png, ".png"));
+            RebuildPendingAttachThumbs();
+            return;
+        }
+        // Otherwise attach to active/last task as before
+        var target = ResolveExistingTarget();
+        if (target is null) return;
+        Vm.SaveAttachmentFromBytes(target.Id, png, ".png");
+        Vm.RefreshAttachmentCount(target);
+        ShowAttachmentToast(target.Title);
+    }
+
+    private void SaveImageFile(string path)
+    {
+        if (_addPanelOpen && AddFormPanel.IsVisible)
+        {
+            _pendingAttachPaths.Add(path);
+            RebuildPendingAttachThumbs();
+            return;
+        }
+        var target = ResolveExistingTarget();
+        if (target is null) return;
+        Vm.SaveAttachment(target.Id, path);
+        Vm.RefreshAttachmentCount(target);
+        ShowAttachmentToast(target.Title);
+    }
+
+    private async void AttachImage_Click(object? sender, RoutedEventArgs e)
+    {
+        var files = await FileDialogs.PickFilesAsync(this, "Select image(s) to attach",
+                                                     [FileDialogs.Images, FileDialogs.AllFiles]);
+        if (files.Count == 0) return;
+        _pendingAttachPaths.AddRange(files);
+        RebuildPendingAttachThumbs();
+    }
+
+    private void RebuildPendingAttachThumbs()
+    {
+        int total = _pendingAttachBytes.Count + _pendingAttachPaths.Count;
+        PendingAttachPanel.IsVisible = total > 0;
+        PendingAttachThumbs.Children.Clear();
+
+        // Pasted images (raw bytes)
+        for (int i = 0; i < _pendingAttachBytes.Count; i++)
+        {
+            int idx = i;
+            PendingAttachThumbs.Children.Add(BuildPendingThumb(ImageFiles.FromBytes(_pendingAttachBytes[idx].Data), () =>
+            {
+                if (idx < _pendingAttachBytes.Count) _pendingAttachBytes.RemoveAt(idx);
+                RebuildPendingAttachThumbs();
+            }));
+        }
+
+        // Picked / dropped files (paths)
+        for (int i = 0; i < _pendingAttachPaths.Count; i++)
+        {
+            int idx = i;
+            PendingAttachThumbs.Children.Add(BuildPendingThumb(ImageFiles.Load(_pendingAttachPaths[idx]), () =>
+            {
+                if (idx < _pendingAttachPaths.Count) _pendingAttachPaths.RemoveAt(idx);
+                RebuildPendingAttachThumbs();
+            }));
+        }
+    }
+
+    private Control BuildPendingThumb(Bitmap? src, Action onRemove)
+    {
+        var border = new Border
+        {
+            Width = 72, Height = 72, Margin = new Thickness(0, 0, 8, 8),
+            CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1)
+        }
+        .WithResource(Border.BorderBrushProperty, "BorderColor")
+        .WithResource(Border.BackgroundProperty,  "CardBackground");
+
+        var grid = new Grid();
+        if (src != null)
+            grid.Children.Add(new Image { Source = src, Stretch = Stretch.UniformToFill });
+        else
+            grid.Children.Add(new TextBlock
+            {
+                Text = "📄", FontSize = 26,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment   = VerticalAlignment.Center
+            });
+
+        var del = new Button
+        {
+            Theme   = UiResources.Theme("PlainButton"),
+            Content = "✕", Width = 18, Height = 18, FontSize = 10,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment   = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 2, 0), Cursor = new Cursor(StandardCursorType.Hand),
+            BorderThickness = new Thickness(0),
+            Background = new SolidColorBrush(Color.FromArgb(210, 17, 24, 39)),
+            Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68))
+        };
+        ToolTip.SetTip(del, "Remove");
+        del.Click += (_, _) => onRemove();
+
+        grid.Children.Add(del);
+        border.Child = grid;
+        return border;
+    }
+
+    private void FlushPendingAttachments(int taskId)
+    {
+        foreach (var (data, ext) in _pendingAttachBytes)
+            Vm.SaveAttachmentFromBytes(taskId, data, ext);
+        foreach (var path in _pendingAttachPaths)
+            Vm.SaveAttachment(taskId, path);
+        _pendingAttachBytes.Clear();
+        _pendingAttachPaths.Clear();
+        RebuildPendingAttachThumbs();
+        var vm = Vm.Tasks.FirstOrDefault(t => t.Id == taskId);
+        if (vm != null) Vm.RefreshAttachmentCount(vm);
+    }
+
+    private TaskItemViewModel? ResolveExistingTarget()
+    {
+        if (Vm.Tasks.Count == 0)
+        {
+            InAppNotificationService.Warning("No tasks available to attach to.");
+            return null;
+        }
+        return Vm.ActiveTask ?? Vm.Tasks.First();
+    }
+
+    private static void ShowAttachmentToast(string title)
+        => InAppNotificationService.Success("Image attached to \"" + title + "\".");
+
+    // Task event handlers
+
+    private async void Checkbox_Click(object? sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (GetTaskVm(sender) is not { } vm) return;
+
+        // The checkbox binding is one-way: clicking only ticks the box on screen and
+        // the task itself is untouched until the user confirms. On cancel, untick it.
+        var confirm = new ConfirmDialog(
+            "Mark as Done",
+            $"Mark \"{vm.Title}\" as complete?",
+            "Mark Done", ConfirmType.Info);
+        if (await ShowModalDialog(confirm) != true)
+        {
+            if (sender is CheckBox box)
+                box.SetCurrentValue(ToggleButton.IsCheckedProperty, vm.IsCompleted);
+            return;
+        }
+
+        // 1. Mark as completed first (task moves to CompletedTasks)
+        bool ok = Vm.CompleteTask(vm, out bool needsManualTime);
+        if (!ok) return;
+
+        // 2. Handle manual time entry if needed
+        if (needsManualTime)
+        {
+            var dlg = new ManualTimeDialog();
+            if (await ShowModalDialog(dlg) == true && dlg.ResultMinutes.HasValue)
+            { vm.ManualTimeMinutes = dlg.ResultMinutes; Vm.SaveTask(vm); }
+        }
+
+        // 3. Refresh stats if visible
+        if (StatsPage.IsVisible) { Vm.RefreshStats(_statsWeekOffset); BuildStatsUI(); }
+
+        // 4. Show celebration popup with confetti (task is already saved)
+        if (!App.Settings.Current.ShowCompletionPopup) return;
+        ShowDimOverlay();
+        var celebration = new TaskCompletedDialog(vm);
+        celebration.Closed += (_, _) => HideDimOverlay();
+        celebration.Show(this);
+        celebration.Activate();
+    }
+
+    private async void Completed_Uncheck(object? sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (GetTaskVm(sender) is not { } vm) return;
+        var confirm = new ConfirmDialog(
+            "Resume Task",
+            $"Move \"{vm.Title}\" back to active tasks?",
+            "Resume", ConfirmType.Warning);
+        if (await ShowModalDialog(confirm) != true) return;
+        Vm.UncompleteTask(vm);
+        RefreshCompletedList();
+    }
+
+    private void ShowMore_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is { } vm) vm.IsDescriptionExpanded = !vm.IsDescriptionExpanded;
+    }
+
+    private void ActiveToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var before = DragDropBehavior.CapturePositions(TaskListControl);
+        Vm.ToggleActive(vm);
+        Dispatcher.UIThread.Post(() => DragDropBehavior.AnimateFlip(TaskListControl, before), DispatcherPriority.Background);
+    }
+
+    private void Pause_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is { } vm) Vm.TogglePause(vm);
+    }
+
+    private async void Edit_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var dlg = new EditTaskDialog(vm, Vm);
+        if (await ShowModalDialog(dlg) == true)
+        {
+            Vm.SaveTask(vm);
+            // Preserve the user's custom sort order — just refresh the display
+            Vm.RefreshVisibleTasks();
+        }
+    }
+
+    private async void Reminder_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        await ShowModalDialog(new ReminderDialog(vm.Id, vm.Title, App.Database!));
+        Vm.RefreshReminderCount(vm);  // update badge after dialog closes
+    }
+
+    private async void Attachment_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        await ShowModalDialog(new AttachmentDialog(vm.Id, vm.Title, Vm));
+    }
+
+    private async void Delete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var dlg = new ConfirmDialog("Delete Task",
+            "Delete \"" + vm.Title + "\"?\n\nThis cannot be undone.", "Delete", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true) Vm.DeleteTask(vm);
+    }
+
+    private void TaskContent_Click(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!IsLeftClick(e)) return;
+        if (GetTaskVm(sender) is not { } vm) return;
+        ShowDimmedDetail(vm);
+    }
+
+    private void ShowDimmedDetail(TaskItemViewModel vm)
+    {
+        ShowDimOverlay();
+        var dlg = new TaskDetailDialog(vm, Vm);
+        dlg.Closed += (_, _) => HideDimOverlay();
+        dlg.Show(this);
+    }
+
+    // Completed page
+
+    private void CGroup_Click(object? sender, RoutedEventArgs e)
+    {
+        _completedGroupFilter = (sender as RadioButton)?.Tag?.ToString() ?? "All";
+        // Clear date picker when a chip filter is selected
+        CompletedDatePicker.SelectedDate = null;
+        RefreshCompletedList();
+    }
+
+    private void CompletedDate_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (CompletedDatePicker.SelectedDate == null) return;
+        // Deselect all chip filters when a specific date is chosen
+        CChipAll.IsChecked = false;
+        _completedGroupFilter = "Date";
+        RefreshCompletedList();
+    }
+
+    private void Sort_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is MainViewModel) RefreshCompletedList();
+    }
+
+    private void RefreshCompletedList()
+    {
+        if (DataContext is not MainViewModel) return;
+        var search = (Vm.CompletedSearch ?? string.Empty).Trim();
+        IEnumerable<TaskItemViewModel> filtered = Vm.CompletedTasks;
+        if (!string.IsNullOrEmpty(search))
+            filtered = filtered.Where(v =>
+                v.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                v.TaskNumberDisplay.Contains(search, StringComparison.OrdinalIgnoreCase));
+        if (_completedGroupFilter == "Today")
+            filtered = filtered.Where(v => v.CompletedGroup == "Today");
+        else if (_completedGroupFilter == "This Week")
+            filtered = filtered.Where(v => v.CompletedGroup is "Today" or "This Week");
+        else if (_completedGroupFilter == "This Month")
+            filtered = filtered.Where(v => v.CompletedAt.HasValue &&
+                v.CompletedAt.Value.Year == DateTime.Today.Year &&
+                v.CompletedAt.Value.Month == DateTime.Today.Month);
+        else if (_completedGroupFilter == "Date" && CompletedDatePicker.SelectedDate is DateTime picked)
+            filtered = filtered.Where(v => v.CompletedAt.HasValue &&
+                v.CompletedAt.Value.Date == picked.Date);
+
+        var sortTag = (SortBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "CompletedDesc";
+        static int TimeKey(TaskItemViewModel v)
+            => v.TotalSeconds > 0 ? v.TotalSeconds : (v.ManualTimeMinutes ?? 0) * 60;
+
+        // Only TaskItemViewModels in the source — no mixed string headers
+        var items = new List<TaskItemViewModel>();
+        foreach (var g in filtered.GroupBy(v => v.CompletedGroup)
+                                  .OrderBy(g => g.Key == "Today" ? 0 : g.Key == "This Week" ? 1 : 2))
+        {
+            IEnumerable<TaskItemViewModel> sorted = sortTag switch
+            {
+                "oldest"    => g.OrderBy(v => v.CompletedAt ?? DateTime.MinValue),
+                "time_desc" => g.OrderByDescending(TimeKey),
+                "time_asc"  => g.OrderBy(TimeKey),
+                _           => g.OrderByDescending(v => v.CompletedAt ?? DateTime.MinValue)
+            };
+            items.AddRange(sorted);
+        }
+        CompletedList.ItemsSource = items;
+        CompletedEmptyState.IsVisible = items.Count == 0;
+    }
+
+    private async void CompletedTask_Click(object? sender, PointerReleasedEventArgs e)
+    {
+        if (IsLeftClick(e) && GetTaskVm(sender) is { } vm) await OpenTaskDetail(vm);
+    }
+
+    private async void CompletedUpdateTime_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var dlg = new ManualTimeDialog();
+
+        // Pre-fill with whatever time is currently showing:
+        // timer-tracked seconds take precedence over ManualTimeMinutes
+        int currentMinutes = vm.TotalSeconds > 0
+            ? Math.Max(1, vm.TotalSeconds / 60)
+            : vm.ManualTimeMinutes ?? 0;
+        if (currentMinutes > 0)
+            dlg.PresetMinutes(currentMinutes);
+
+        if (await ShowModalDialog(dlg) == true && dlg.ResultMinutes.HasValue)
+        {
+            // Store as accumulated seconds so if the task is restored, the timer
+            // continues from this value rather than restarting from zero.
+            vm.Model.AccumulatedSeconds = dlg.ResultMinutes.Value * 60;
+            vm.ManualTimeMinutes = null;
+            Vm.SaveTask(vm);
+            RefreshCompletedList();
+            InAppNotificationService.Success($"Time updated for \"{vm.Title}\".");
+        }
+    }
+
+    private async void CompletedDelete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var dlg = new ConfirmDialog("Delete Completed Task",
+            "Permanently delete \"" + vm.Title + "\"?\n\nThis cannot be undone.",
+            "Delete", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true) { Vm.DeleteTask(vm); RefreshCompletedList(); }
+    }
+
+    // Recycle bin
+
+    private void OpenTrash_Click(object? sender, RoutedEventArgs e) => NavigateTo(AppPage.Trash);
+
+    private void RefreshTrashList()
+    {
+        if (DataContext is not MainViewModel) return;
+        TrashEmptyState.IsVisible = Vm.DeletedTasks.Count == 0;
+    }
+
+    private void Restore_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        Vm.RestoreTask(vm);
+        RefreshTrashList();
+        InAppNotificationService.Success($"Restored \"{vm.Title}\".");
+    }
+
+    private async void PermanentDelete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (GetTaskVm(sender) is not { } vm) return;
+        var dlg = new ConfirmDialog("Delete Permanently",
+            "Permanently delete \"" + vm.Title + "\"?\n\nThis cannot be undone.",
+            "Delete", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true) { Vm.PermanentlyDeleteTask(vm); RefreshTrashList(); }
+    }
+
+    private async void Migrate_Click(object? sender, RoutedEventArgs e)
+    {
+        if (App.Database is null) return;
+        await ShowModalDialog(new MigrateDialog(new Services.Migration.MigrationService(App.Database)));
+    }
+
+    private async void ClearMeetingHistory_Click(object? sender, RoutedEventArgs e)
+    {
+        var dlg = new ConfirmDialog("Clear Meeting History",
+            "Delete all auto-detected meeting sessions?\n\nThis cannot be undone.",
+            "Clear", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) != true) return;
+        App.Database!.ClearMeetingSessions();
+        if (StatsPage.IsVisible) { Vm.RefreshStats(_statsWeekOffset); BuildStatsUI(); }
+        InAppNotificationService.Success("Meeting history cleared.");
+    }
+
+    private async void EmptyBin_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Vm.DeletedTasks.Count == 0)
+        {
+            InAppNotificationService.Info("The recycle bin is already empty.");
+            return;
+        }
+        var dlg = new ConfirmDialog("Empty Recycle Bin",
+            $"Permanently delete all {Vm.DeletedTasks.Count} item(s) in the bin?\n\nThis cannot be undone.",
+            "Empty Bin", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true) { Vm.EmptyTrash(); RefreshTrashList(); }
+    }
+
+    // Notes page
+
+    private void NewNote_Click(object? sender, RoutedEventArgs e)
+    {
+        _addNotePanelOpen = !_addNotePanelOpen;
+        AddNotePanel.IsVisible = _addNotePanelOpen;
+        if (_addNotePanelOpen)
+        {
+            NoteTitleBox.Text = string.Empty;
+            NoteDescBox.Text  = string.Empty;
+            NoteTagsBox.Text  = string.Empty;
+            NoteTitleBox.Focus();
+        }
+    }
+
+    private void CancelNote_Click(object? sender, RoutedEventArgs e)
+    {
+        _addNotePanelOpen = false;
+        AddNotePanel.IsVisible = false;
+    }
+
+    private void SaveNote_Click(object? sender, RoutedEventArgs e)
+    {
+        var title = NoteTitleBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            InAppNotificationService.Warning("Note title cannot be empty.");
+            return;
+        }
+        Vm.AddNote(title, NoteDescBox.Text?.Trim() ?? string.Empty, NoteTagsBox.Text?.Trim() ?? string.Empty);
+        _addNotePanelOpen = false;
+        AddNotePanel.IsVisible = false;
+        Vm.LoadNotes();
+        RefreshNotesEmpty();
+        InAppNotificationService.Success("Note saved.");
+    }
+
+    private async void Note_Click(object? sender, PointerReleasedEventArgs e)
+    {
+        if (IsLeftClick(e) && sender is Control { DataContext: Note note })
+            await ShowModalDialog(new NoteDetailDialog(note, Vm));
+    }
+
+    private async void DeleteNote_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: Note note }) return;
+        var dlg = new ConfirmDialog("Delete Note",
+            $"Delete \"{note.Title}\"? This cannot be undone.",
+            "Delete", ConfirmType.Danger);
+        if (await ShowModalDialog(dlg) == true) { Vm.DeleteNote(note); RefreshNotesEmpty(); }
+    }
+
+    private void RefreshNotesEmpty()
+    {
+        NotesEmptyLabel.IsVisible = Vm.FilteredNotes.Count == 0;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    private static TaskItemViewModel? GetTaskVm(object? sender)
+        => (sender as StyledElement)?.DataContext as TaskItemViewModel;
+
+    private static bool IsLeftClick(PointerReleasedEventArgs e)
+        => e.InitialPressMouseButton == MouseButton.Left;
+
+    // ── Open task detail dialog ───────────────────────────────────────────
+    public async Task OpenTaskDetail(TaskItemViewModel vm)
+        => await ShowModalDialog(new TaskDetailDialog(vm, Vm));
+
+    // ── Stats UI ─────────────────────────────────────────────────────────
+
+    private static TextBlock ChartLabel(string text, double fontSize, string brushKey) =>
+        new TextBlock { Text = text, FontSize = fontSize, HorizontalAlignment = HorizontalAlignment.Center }
+            .WithResource(TextBlock.ForegroundProperty, brushKey);
+
+    private void BuildStatsUI()
+    {
+        StatTodayCount.Text = Vm.StatsCompletedToday.ToString();
+        StatWeekCount.Text  = Vm.StatsCompletedWeek.ToString();
+        StatAllTime.Text    = Vm.StatsCompletedAllTime.ToString();
+        StatTimeToday.Text  = Vm.StatsTimeToday;
+        UpdateMeetingDisplay();
+
+        // Update week navigation label and Next button state
+        WeekLabel.Text = Vm.Last7DaysWeekLabel;
+        NextWeekBtn.IsEnabled = _statsWeekOffset < 0;
+
+        BarChartPanel.Children.Clear();
+        foreach (var (day, count) in Vm.Last7DaysData)
+        {
+            int    max    = Math.Max(Vm.Last7DaysMax, 1);
+            double height = Math.Max(4, 80.0 * count / max);
+            var col = new StackPanel
+                { VerticalAlignment = VerticalAlignment.Bottom, Width = 30, Margin = new Thickness(3, 0, 3, 0) };
+            var bar = new Border { Height = height, CornerRadius = new CornerRadius(3, 3, 0, 0) }
+                .WithResource(Border.BackgroundProperty, "PrimaryBlue");
+            col.Children.Add(ChartLabel(count > 0 ? count.ToString() : string.Empty, 10, "TextPrimary"));
+            col.Children.Add(bar);
+            col.Children.Add(ChartLabel(day, 10, "TextSecondary"));
+            BarChartPanel.Children.Add(col);
+        }
+
+        BuildTimeChartPanel();
+
+        TopTasksPanel.Children.Clear();
+        static int TimeKey(TaskItemViewModel v)  // local function — avoids closure allocation
+            => v.TotalSeconds > 0 ? v.TotalSeconds : (v.ManualTimeMinutes ?? 0) * 60;
+        var today = DateTime.Today;
+        IEnumerable<TaskItemViewModel> pool = _topTasksFilter switch
+        {
+            "today" => Vm.CompletedTasks.Where(t => t.CompletedAt?.Date == today),
+            "week"  => Vm.CompletedTasks.Where(t => t.CompletedAt?.Date >= today.AddDays(-6)),
+            "month" => Vm.CompletedTasks.Where(t => t.CompletedAt.HasValue &&
+                           t.CompletedAt.Value.Year == today.Year &&
+                           t.CompletedAt.Value.Month == today.Month),
+            _       => Vm.CompletedTasks
+        };
+        var topTasks = pool.Where(t => TimeKey(t) > 0).OrderByDescending(TimeKey).Take(5).ToList();
+        TopTasksEmpty.IsVisible = topTasks.Count == 0;
+        foreach (var t in topTasks)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var title = new TextBlock { Text = t.Title, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis }
+                .WithResource(TextBlock.ForegroundProperty, "TextPrimary");
+            Grid.SetColumn(title, 0);
+            var time = new TextBlock
+                { Text = t.TimeDisplay, FontSize = 12, Margin = new Thickness(8, 0, 0, 0) }
+                .WithResource(TextBlock.FontFamilyProperty, "MonoFont")
+                .WithResource(TextBlock.ForegroundProperty, "AccentGreen");
+            Grid.SetColumn(time, 1);
+            row.Children.Add(title);
+            row.Children.Add(time);
+            TopTasksPanel.Children.Add(row);
+        }
+
+        BuildBusiestHourChart();
+        BuildWeeklyTimeChart();
+        RefreshAndBuildAppUsage();
+    }
+
+    private void TopFilter_Click(object? sender, RoutedEventArgs e)
+    {
+        _topTasksFilter = (sender as RadioButton)?.Tag?.ToString() ?? "overall";
+        BuildStatsUI();
+    }
+
+    // ── Week navigation (Stats page) ─────────────────────────────────────────
+
+    private void PrevWeek_Click(object? sender, RoutedEventArgs e)
+    {
+        _statsWeekOffset--;
+        NextWeekBtn.IsEnabled = _statsWeekOffset < 0;
+        Vm.RefreshStats(_statsWeekOffset);
+        BuildStatsUI();
+    }
+
+    private void NextWeek_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_statsWeekOffset >= 0) return;
+        _statsWeekOffset++;
+        NextWeekBtn.IsEnabled = _statsWeekOffset < 0;
+        Vm.RefreshStats(_statsWeekOffset);
+        BuildStatsUI();
+    }
+
+    private void WeeklyToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        _weeklyChartShowTime = WeeklyTimeToggle.IsChecked == true;
+        BuildWeeklyTimeChart();
+    }
+
+    private void MeetingFilter_Click(object? sender, RoutedEventArgs e)
+    {
+        _meetingFilter = (sender as RadioButton)?.Tag?.ToString() ?? "week";
+        // Re-query the DB for fresh data each time the chip changes
+        Vm.RefreshStats(_statsWeekOffset);
+        UpdateMeetingDisplay();
+    }
+
+    private void UpdateMeetingDisplay()
+    {
+        StatMeetingDisplay.Text = _meetingFilter switch
+        {
+            "today" => Vm.StatMeetingHoursToday,
+            "month" => Vm.StatMeetingHoursMonth,
+            _       => Vm.StatMeetingHoursWeek
+        };
+    }
+
+    private void BuildTimeChartPanel()
+    {
+        TimeChartPanel.Children.Clear();
+        var data = Vm.Last7DaysTimeData;
+        int max  = Math.Max(Vm.Last7DaysTimeMax, 1);
+
+        foreach (var (day, secs) in data)
+        {
+            double height = Math.Max(4, 80.0 * secs / max);
+            var col = new StackPanel
+                { VerticalAlignment = VerticalAlignment.Bottom, Width = 30, Margin = new Thickness(3, 0, 3, 0) };
+            var bar = new Border { Height = height, CornerRadius = new CornerRadius(3, 3, 0, 0) }
+                .WithResource(Border.BackgroundProperty, "AccentGreen");
+            col.Children.Add(ChartLabel(secs > 0 ? FormatSecsShort(secs) : string.Empty, 9, "TextPrimary"));
+            col.Children.Add(bar);
+            col.Children.Add(ChartLabel(day, 10, "TextSecondary"));
+            TimeChartPanel.Children.Add(col);
+        }
+    }
+
+    private static string FormatSecsShort(int secs)
+    {
+        if (secs <= 0) return string.Empty;
+        var ts = TimeSpan.FromSeconds(secs);
+        return ts.TotalHours >= 1 ? $"{(int)ts.TotalHours}h{ts.Minutes:D2}m" : $"{ts.Minutes}m";
+    }
+
+    // Full-precision format used in App Usage panel: "1h 20m 19s" or "30m 20s" or "45s"
+    private static string FormatSecsFull(int secs)
+    {
+        if (secs <= 0) return "0s";
+        var ts = TimeSpan.FromSeconds(secs);
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        if (ts.Minutes > 0)
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Seconds}s";
+    }
+
+    private void BuildBusiestHourChart()
+    {
+        BusiestHourPanel.Children.Clear();
+        var data     = Vm.BusiestHourData;   // 15 slots: 7 AM–9 PM, avg/day last 30 days
+        double maxVal = data.Max();
+
+        BusiestHourEmpty.IsVisible = maxVal == 0;
+        if (maxVal == 0) return;
+
+        for (int i = 0; i < 15; i++)
+        {
+            int    hour   = i + 7;
+            double avg    = data[i];
+            double height = avg == 0 ? 4 : Math.Max(6, 64.0 * avg / maxVal);
+            byte   alpha  = avg == 0 ? (byte)35 : (byte)(80 + (int)(175.0 * avg / maxVal));
+
+            var bar = new Border
+            {
+                Height       = height,
+                Width        = 26,
+                CornerRadius = new CornerRadius(2, 2, 0, 0),
+                Background   = new SolidColorBrush(Color.FromArgb(alpha, 96, 165, 250))
+            };
+            ToolTip.SetTip(bar, $"{hour:D2}:00: avg {avg:F2} completions/active day (last 30 days)");
+
+            var col = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Width             = 30,
+                Margin            = new Thickness(1, 0, 1, 0)
+            };
+            col.Children.Add(bar);
+            col.Children.Add(ChartLabel($"{hour:D2}", 8, "TextSecondary"));
+            BusiestHourPanel.Children.Add(col);
+        }
+    }
+
+    // ── App Usage panel ───────────────────────────────────────────────────────
+
+    private void AppUsageFilter_Click(object? sender, RoutedEventArgs e)
+    {
+        _appUsageFilter = (sender as RadioButton)?.Tag?.ToString() ?? "today";
+        RefreshAndBuildAppUsage();
+    }
+
+    private void AppUsageRefresh_Click(object? sender, RoutedEventArgs e)
+        => RefreshAndBuildAppUsage();
+
+    /// <summary>Wheel turns over the horizontal weekly chart scroll the whole Stats page instead.</summary>
+    private const double WheelScrollStep = 50;
+
+    private void InnerScroll_PreviewMouseWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.Handled) return;
+        e.Handled = true;
+        var offset = StatsScrollViewer.Offset;
+        StatsScrollViewer.Offset = offset.WithY(Math.Max(0, offset.Y - e.Delta.Y * WheelScrollStep));
+    }
+
+    private void RefreshAndBuildAppUsage()
+    {
+        var today = DateTime.Today;
+        DateTime from, to;
+        switch (_appUsageFilter)
+        {
+            case "week":
+                from = today.AddDays(-6);
+                to   = today.AddDays(1);
+                break;
+            case "month":
+                from = new DateTime(today.Year, today.Month, 1);
+                to   = today.AddDays(1);
+                break;
+            default:
+                from = today;
+                to   = today.AddDays(1);
+                break;
+        }
+        Vm.RefreshAppUsage(from, to);
+        BuildAppUsagePanel();
+    }
+
+    private static readonly Color[] _avatarPalette =
+    [
+        Color.FromRgb( 99, 102, 241),
+        Color.FromRgb( 16, 185, 129),
+        Color.FromRgb(245, 158,  11),
+        Color.FromRgb(239,  68,  68),
+        Color.FromRgb( 59, 130, 246),
+        Color.FromRgb(168,  85, 247),
+        Color.FromRgb(236,  72, 153),
+        Color.FromRgb( 20, 184, 166),
+    ];
+
+    private static Color AvatarColor(string name)
+        => _avatarPalette[Math.Abs(name.GetHashCode()) % _avatarPalette.Length];
+
+    private void BuildAppUsagePanel()
+    {
+        AppUsagePanel.Children.Clear();
+
+        var data = Vm.AppUsageData;
+        AppUsageEmpty.IsVisible = data.Count == 0;
+        if (data.Count == 0) return;
+
+        int maxSecs = Math.Max(1, data[0].Seconds);
+
+        foreach (var (appName, secs, exePath) in data)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Icon or letter-avatar (tooltip shows the full app name)
+            Control iconCell;
+            if (PlatformServices.AppIcons.GetIcon(exePath) is { } appIcon)
+            {
+                var img = new Image
+                {
+                    Source            = appIcon,
+                    Width             = 24, Height = 24,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                RenderOptions.SetBitmapInterpolationMode(img, BitmapInterpolationMode.HighQuality);
+                iconCell = img;
+            }
+            else
+            {
+                iconCell = new Border
+                {
+                    Width             = 24, Height = 24,
+                    CornerRadius      = new CornerRadius(6),
+                    Background        = new SolidColorBrush(AvatarColor(appName)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text                = appName.Length > 0 ? appName[0].ToString().ToUpperInvariant() : "?",
+                        FontSize            = 12,
+                        FontWeight          = FontWeight.Bold,
+                        Foreground          = Brushes.White,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment   = VerticalAlignment.Center
+                    }
+                };
+            }
+            ToolTip.SetTip(iconCell, appName);
+            Grid.SetColumn(iconCell, 0);
+
+            // Progress bar
+            var barGrid = new Grid
+            {
+                Margin            = new Thickness(8, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Height            = 6
+            };
+            var track = new Border { Height = 6, CornerRadius = new CornerRadius(3) }
+                .WithResource(Border.BackgroundProperty, "InputBackground");
+            double ratio = (double)secs / maxSecs;
+            var fill = new Border
+            {
+                Height              = 6,
+                CornerRadius        = new CornerRadius(3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background          = new SolidColorBrush(Color.FromRgb(52, 211, 153))
+            };
+            barGrid.SizeChanged += (_, a) => fill.Width = Math.Max(4, a.NewSize.Width * ratio);
+            barGrid.Children.Add(track);
+            barGrid.Children.Add(fill);
+            Grid.SetColumn(barGrid, 1);
+
+            var timeTb = new TextBlock
+            {
+                Text              = FormatSecsFull(secs),
+                FontSize          = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                MinWidth          = 80,
+                TextAlignment     = TextAlignment.Right
+            }
+            .WithResource(TextBlock.FontFamilyProperty, "MonoFont")
+            .WithResource(TextBlock.ForegroundProperty, "AccentGreen");
+            Grid.SetColumn(timeTb, 2);
+
+            row.Children.Add(iconCell);
+            row.Children.Add(barGrid);
+            row.Children.Add(timeTb);
+            AppUsagePanel.Children.Add(row);
+        }
+    }
+
+    private void BuildWeeklyTimeChart()
+    {
+        WeeklyChartPanel.Children.Clear();
+        string[] weekDayRanges = { "Days 1–7", "Days 8–14", "Days 15–21", "Days 22–end" };
+
+        bool showTime = _weeklyChartShowTime;
+        var data      = showTime ? Vm.WeeklyTimeData : Vm.WeeklyTaskData;
+        int maxValue  = Math.Max(1, data.Max());
+        bool anyData  = data.Any(v => v > 0);
+        WeeklyChartEmpty.Text      = showTime ? "No tracked time yet." : "No task data yet.";
+        WeeklyChartEmpty.IsVisible = !anyData;
+        if (!anyData) return;
+
+        for (int w = 0; w < 4; w++)
+        {
+            int    value  = data[w];
+            double height = value == 0 ? 4 : Math.Max(8, 64.0 * value / maxValue);
+            byte   alpha  = value == 0 ? (byte)30 : (byte)(70 + (int)(185.0 * value / maxValue));
+            string tip    = showTime
+                ? $"Week {w + 1} ({weekDayRanges[w]})\nAvg per month: {(value > 0 ? TaskItemViewModel.FormatSeconds(value) : "no data")}"
+                : $"Week {w + 1} ({weekDayRanges[w]})\nAvg tasks/month: {(value > 0 ? $"{value}" : "no data")}";
+
+            var bar = new Border
+            {
+                Height = height, Width = 54, CornerRadius = new CornerRadius(4, 4, 0, 0),
+                Background = new SolidColorBrush(showTime
+                    ? Color.FromArgb(alpha, 34, 197, 94)
+                    : Color.FromArgb(alpha, 96, 165, 250))
+            };
+            ToolTip.SetTip(bar, tip);
+            var lbl = ChartLabel($"Week {w + 1}", 10, "TextSecondary");
+            lbl.Margin = new Thickness(0, 5, 0, 0);
+            var sub = ChartLabel(
+                value == 0 ? "—" : showTime ? TaskItemViewModel.FormatSeconds(value) : $"{value} avg",
+                9, value == 0 ? "TextSecondary" : showTime ? "AccentGreen" : "PrimaryBlue");
+            sub.Margin = new Thickness(0, 2, 0, 0);
+            if (showTime) sub.WithResource(TextBlock.FontFamilyProperty, "MonoFont");
+            var col = new StackPanel
+                { VerticalAlignment = VerticalAlignment.Bottom, Width = 66, Margin = new Thickness(6, 0, 6, 0) };
+            col.Children.Add(bar); col.Children.Add(lbl); col.Children.Add(sub);
+            WeeklyChartPanel.Children.Add(col);
+        }
+    }
+}

@@ -1,8 +1,12 @@
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
+using Avalonia;
+using Avalonia.Animation.Easings;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.VisualTree;
+using Tasky.Helpers;
 using Tasky.ViewModels;
 
 namespace Tasky.Behaviors;
@@ -11,39 +15,41 @@ namespace Tasky.Behaviors;
 /// Animated drag-to-reorder for the task ItemsControl.
 /// Shows a ghost card that follows the cursor and a blue drop-line
 /// indicating where the card will land — similar to Azure DevOps / Trello.
+/// The drag is tracked with pointer capture, which works the same on Windows and macOS.
 /// </summary>
 public static class DragDropBehavior
 {
     // ─── Attached property ───────────────────────────────────────────────
 
-    public static readonly DependencyProperty IsEnabledProperty =
-        DependencyProperty.RegisterAttached("IsEnabled", typeof(bool), typeof(DragDropBehavior),
-            new PropertyMetadata(false, OnIsEnabledChanged));
+    public static readonly AttachedProperty<bool> IsEnabledProperty =
+        AvaloniaProperty.RegisterAttached<ItemsControl, bool>("IsEnabled", typeof(DragDropBehavior));
 
-    public static bool GetIsEnabled(DependencyObject o)          => (bool)o.GetValue(IsEnabledProperty);
-    public static void SetIsEnabled(DependencyObject o, bool v)  => o.SetValue(IsEnabledProperty, v);
+    public static bool GetIsEnabled(ItemsControl o)          => o.GetValue(IsEnabledProperty);
+    public static void SetIsEnabled(ItemsControl o, bool v)  => o.SetValue(IsEnabledProperty, v);
 
-    private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    static DragDropBehavior()
     {
-        if (d is not ItemsControl ic) return;
-        if ((bool)e.NewValue)
+        IsEnabledProperty.Changed.AddClassHandler<ItemsControl>((ic, e) =>
         {
-            ic.PreviewMouseLeftButtonDown += OnMouseDown;
-            ic.PreviewMouseMove           += OnMouseMove;
-            ic.Drop                       += OnDrop;
-            ic.DragOver                   += OnDragOver;
-            ic.DragLeave                  += OnDragLeave;
-            ic.AllowDrop = true;
-        }
-        else
-        {
-            ic.PreviewMouseLeftButtonDown -= OnMouseDown;
-            ic.PreviewMouseMove           -= OnMouseMove;
-            ic.Drop                       -= OnDrop;
-            ic.DragOver                   -= OnDragOver;
-            ic.DragLeave                  -= OnDragLeave;
-        }
+            if (e.NewValue is true)
+            {
+                ic.AddHandler(InputElement.PointerPressedEvent,  OnPointerPressed,  Avalonia.Interactivity.RoutingStrategies.Tunnel);
+                ic.AddHandler(InputElement.PointerMovedEvent,    OnPointerMoved,    Avalonia.Interactivity.RoutingStrategies.Tunnel);
+                ic.AddHandler(InputElement.PointerReleasedEvent, OnPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+                ic.AddHandler(InputElement.PointerCaptureLostEvent, OnCaptureLost);
+            }
+            else
+            {
+                ic.RemoveHandler(InputElement.PointerPressedEvent,  OnPointerPressed);
+                ic.RemoveHandler(InputElement.PointerMovedEvent,    OnPointerMoved);
+                ic.RemoveHandler(InputElement.PointerReleasedEvent, OnPointerReleased);
+                ic.RemoveHandler(InputElement.PointerCaptureLostEvent, OnCaptureLost);
+            }
+        });
     }
+
+    /// <summary>Movement (in DIPs) before a press becomes a drag, as on Windows.</summary>
+    private const double MinimumDragDistance = 4;
 
     // ─── Drag state ──────────────────────────────────────────────────────
 
@@ -57,73 +63,79 @@ public static class DragDropBehavior
     private static AdornerLayer?        _adornerLayer;
     private static int                  _dropIndex = -1;
 
-    // ─── Mouse handlers ──────────────────────────────────────────────────
+    // ─── Pointer handlers ────────────────────────────────────────────────
 
-    private static void OnMouseDown(object sender, MouseButtonEventArgs e)
+    private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _startPoint = e.GetPosition(null);
-        _dragged    = GetVm(e.OriginalSource as DependencyObject);
+        if (sender is not ItemsControl ic || !e.GetCurrentPoint(ic).Properties.IsLeftButtonPressed) return;
+        _startPoint = e.GetPosition(ic);
+        _dragged    = GetVm(e.Source as Visual);
         _dragging   = false;
     }
 
-    private static void OnMouseMove(object sender, MouseEventArgs e)
+    private static void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _dragged is null) return;
+        if (sender is not ItemsControl ic || _dragged is null) return;
+        if (!e.GetCurrentPoint(ic).Properties.IsLeftButtonPressed) { EndDrag(); return; }
 
-        var delta = e.GetPosition(null) - _startPoint;
-        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-
+        var pos = e.GetPosition(ic);
         if (!_dragging)
         {
+            var delta = pos - _startPoint;
+            if (Math.Abs(delta.X) < MinimumDragDistance && Math.Abs(delta.Y) < MinimumDragDistance) return;
             _dragging = true;
-            ShowGhost(_dragged);
+            e.Pointer.Capture(ic);
+            ShowGhost(ic, _dragged);
         }
 
-        DragDrop.DoDragDrop((DependencyObject)sender,
-            new DataObject(typeof(TaskItemViewModel), _dragged),
-            DragDropEffects.Move);
+        // Move ghost to cursor
+        MoveGhost(ic, pos);
 
-        // Cleanup after drag ends (drop or cancel)
+        // Calculate drop index & show indicator line
+        _dropIndex = GetDropIndex(ic, pos);
+        ShowDropLine(ic, _dropIndex);
+        e.Handled = true;
+    }
+
+    private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is not ItemsControl ic) return;
+        bool wasDragging = _dragging;
+        var dragged      = _dragged;
+        int dropIndex    = _dropIndex;
+        _dragged = null;
+        // A plain click must reach the card's buttons untouched: only a real drag owns the pointer.
+        if (!wasDragging || dragged is null) return;
+
+        e.Pointer.Capture(null);
+        EndDrag();
+        e.Handled = true;   // a drag is not a click on the card
+        Drop(ic, dragged, dropIndex);
+    }
+
+    private static void OnCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (_dragging) EndDrag();
+    }
+
+    private static void EndDrag()
+    {
         HideGhost();
         HideDropLine();
         _dragged  = null;
         _dragging = false;
     }
 
-    private static void OnDragOver(object sender, DragEventArgs e)
+    private static void Drop(ItemsControl ic, TaskItemViewModel dragged, int dropIndex)
     {
-        if (sender is not ItemsControl ic) return;
-
-        e.Effects = DragDropEffects.Move;
-        e.Handled = true;
-
-        // Move ghost to cursor
-        MoveGhost(ic, e);
-
-        // Calculate drop index & show indicator line
-        _dropIndex = GetDropIndex(ic, e);
-        ShowDropLine(ic, e, _dropIndex);
-    }
-
-    private static void OnDragLeave(object sender, DragEventArgs e)
-        => HideDropLine();
-
-    private static void OnDrop(object sender, DragEventArgs e)
-    {
-        HideDropLine();
-        HideGhost();
-
-        if (sender is not ItemsControl ic) return;
-        var dragged = e.Data.GetData(typeof(TaskItemViewModel)) as TaskItemViewModel;
-        if (dragged is null || ic.DataContext is not MainViewModel vm) return;
+        if (ic.DataContext is not MainViewModel vm) return;
 
         var list     = vm.Tasks;
         int oldIndex = list.IndexOf(dragged);
         if (oldIndex < 0) return;
 
         int newIndex;
-        if (_dropIndex >= ic.Items.Count)
+        if (dropIndex >= ic.ItemCount)
         {
             // Dropping past the last item → go to end.
             // Use list.Count so the shift-adjustment (newIndex--) lands on list.Count-1.
@@ -132,7 +144,7 @@ public static class DragDropBehavior
         else
         {
             // Map the visual slot's VM back to its index in Tasks
-            var targetVm = ic.Items[_dropIndex] as TaskItemViewModel;
+            var targetVm = ic.Items[dropIndex] as TaskItemViewModel;
             newIndex = targetVm is not null ? list.IndexOf(targetVm) : list.Count;
         }
 
@@ -150,10 +162,7 @@ public static class DragDropBehavior
         list.Move(oldIndex, newIndex);
         vm.PersistSortOrder();    // saves to DB + refreshes VisibleTasks
 
-        // After layout is complete, animate from old positions to new positions
-        ic.Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.Render,
-            () => AnimateFlip(ic, beforePositions));
+        AnimateFlip(ic, beforePositions);
     }
 
     // ─── FLIP animation ──────────────────────────────────────────────────
@@ -162,12 +171,8 @@ public static class DragDropBehavior
     public static Dictionary<TaskItemViewModel, double> CapturePositions(ItemsControl ic)
     {
         var dict = new Dictionary<TaskItemViewModel, double>();
-        for (int i = 0; i < ic.Items.Count; i++)
-        {
-            if (ic.Items[i] is not TaskItemViewModel vm) continue;
-            if (ic.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement el) continue;
-            dict[vm] = el.TranslatePoint(new Point(0, 0), ic).Y;
-        }
+        foreach (var (vm, el) in Containers(ic))
+            if (el.TranslatePoint(new Point(0, 0), ic) is { } p) dict[vm] = p.Y;
         return dict;
     }
 
@@ -175,46 +180,43 @@ public static class DragDropBehavior
     /// For each item that changed Y position, start it from the old Y and
     /// smoothly animate it to the new Y — giving the "cards sliding" effect.
     /// </summary>
-    public static void AnimateFlip(ItemsControl ic,
-        Dictionary<TaskItemViewModel, double> before)
+    public static void AnimateFlip(ItemsControl ic, Dictionary<TaskItemViewModel, double> before)
     {
+        ic.UpdateLayout();   // let the moved cards reach their new positions first
+
         // Quintic ease-out: starts fast, decelerates gracefully at the end
-        var ease = new System.Windows.Media.Animation.QuinticEase
-            { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
-        var dur = new Duration(TimeSpan.FromMilliseconds(520));
+        var ease = new QuinticEaseOut();
+        var dur  = TimeSpan.FromMilliseconds(520);
 
-        for (int i = 0; i < ic.Items.Count; i++)
+        foreach (var (vm, el) in Containers(ic))
         {
-            if (ic.Items[i] is not TaskItemViewModel vm) continue;
-            if (ic.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement el) continue;
-
-            double newY = el.TranslatePoint(new Point(0, 0), ic).Y;
+            if (el.TranslatePoint(new Point(0, 0), ic) is not { } p) continue;
             if (!before.TryGetValue(vm, out double oldY)) continue;
 
-            double delta = oldY - newY;           // how far (and which direction) it moved
-            if (Math.Abs(delta) < 2) continue;   // no visible change — skip
+            double delta = oldY - p.Y;            // how far (and which direction) it moved
+            if (Math.Abs(delta) < 2) continue;    // no visible change — skip
 
             // Offset the element back to where it was, then animate to 0
-            var xform = new System.Windows.Media.TranslateTransform(0, delta);
+            var xform = new TranslateTransform(0, delta);
             el.RenderTransform = xform;
+            _ = Animator.Animate(xform, TranslateTransform.YProperty, delta, 0, dur, ease)
+                        .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => el.RenderTransform = null));
+        }
+    }
 
-            var anim = new System.Windows.Media.Animation.DoubleAnimation(delta, 0, dur)
-            {
-                EasingFunction = ease
-            };
-            // Clean up after animation
-            anim.Completed += (_, _) =>
-            {
-                el.RenderTransform = System.Windows.Media.Transform.Identity;
-            };
-            xform.BeginAnimation(
-                System.Windows.Media.TranslateTransform.YProperty, anim);
+    private static IEnumerable<(TaskItemViewModel Vm, Control Container)> Containers(ItemsControl ic)
+    {
+        for (int i = 0; i < ic.ItemCount; i++)
+        {
+            if (ic.Items[i] is not TaskItemViewModel vm) continue;
+            if (ic.ContainerFromIndex(i) is not Control el) continue;
+            yield return (vm, el);
         }
     }
 
     // ─── Ghost window ────────────────────────────────────────────────────
 
-    private static void ShowGhost(TaskItemViewModel vm)
+    private static void ShowGhost(ItemsControl ic, TaskItemViewModel vm)
     {
         var card = new Border
         {
@@ -223,7 +225,8 @@ public static class DragDropBehavior
             BorderThickness = new Thickness(2),
             CornerRadius    = new CornerRadius(8),
             Padding         = new Thickness(14, 10, 14, 10),
-            Effect          = new System.Windows.Media.Effects.DropShadowEffect
+            Margin          = new Thickness(0, 0, 12, 12),   // room for the shadow
+            Effect          = new DropShadowDirectionEffect
                 { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.4, Color = Colors.Black },
             Child = new StackPanel
             {
@@ -231,12 +234,12 @@ public static class DragDropBehavior
                 {
                     new TextBlock
                     {
-                        Text        = vm.TaskNumberDisplay + "  " + vm.Title,
-                        Foreground  = Brushes.White,
-                        FontSize    = 13,
-                        FontWeight  = FontWeights.SemiBold,
+                        Text         = vm.TaskNumberDisplay + "  " + vm.Title,
+                        Foreground   = Brushes.White,
+                        FontSize     = 13,
+                        FontWeight   = FontWeight.SemiBold,
                         TextWrapping = TextWrapping.Wrap,
-                        MaxWidth    = 320
+                        MaxWidth     = 320
                     },
                     new TextBlock
                     {
@@ -251,27 +254,27 @@ public static class DragDropBehavior
 
         _ghost = new Window
         {
-            WindowStyle      = WindowStyle.None,
-            AllowsTransparency = true,
-            Background       = Brushes.Transparent,
-            IsHitTestVisible = false,
-            Topmost          = true,
-            ShowInTaskbar    = false,
-            SizeToContent    = SizeToContent.WidthAndHeight,
-            Opacity          = 0.88,
-            Content          = card,
-            Left             = -2000,   // offscreen until first DragOver
-            Top              = 0
+            SystemDecorations     = SystemDecorations.None,
+            TransparencyLevelHint = [WindowTransparencyLevel.Transparent],
+            Background            = Brushes.Transparent,
+            IsHitTestVisible      = false,
+            Topmost               = true,
+            ShowInTaskbar         = false,
+            ShowActivated         = false,
+            CanResize             = false,
+            SizeToContent         = SizeToContent.WidthAndHeight,
+            Opacity               = 0.88,
+            Content               = card,
+            Position              = new PixelPoint(-2000, 0)   // offscreen until first move
         };
-        _ghost.Show();
+        _ghost.Show(TopLevel.GetTopLevel(ic) as Window ?? throw new InvalidOperationException());
     }
 
-    private static void MoveGhost(FrameworkElement ic, DragEventArgs e)
+    private static void MoveGhost(Visual ic, Point pos)
     {
         if (_ghost is null) return;
-        var screen = ic.PointToScreen(e.GetPosition(ic));
-        _ghost.Left = screen.X + 16;
-        _ghost.Top  = screen.Y + 16;
+        var screen = ic.PointToScreen(pos + new Vector(16, 16));
+        _ghost.Position = screen;
     }
 
     private static void HideGhost()
@@ -282,49 +285,47 @@ public static class DragDropBehavior
 
     // ─── Drop-line adorner ───────────────────────────────────────────────
 
-    private static int GetDropIndex(ItemsControl ic, DragEventArgs e)
+    private static int GetDropIndex(ItemsControl ic, Point pos)
     {
-        var pos = e.GetPosition(ic);
-        for (int i = 0; i < ic.Items.Count; i++)
+        for (int i = 0; i < ic.ItemCount; i++)
         {
-            if (ic.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement el) continue;
-            var topLeft = el.TranslatePoint(new Point(0, 0), ic);
-            var mid     = topLeft.Y + el.ActualHeight / 2;
+            if (ic.ContainerFromIndex(i) is not Control el) continue;
+            if (el.TranslatePoint(new Point(0, 0), ic) is not { } topLeft) continue;
+            var mid = topLeft.Y + el.Bounds.Height / 2;
             if (pos.Y < mid) return i;
         }
-        return ic.Items.Count;
+        return ic.ItemCount;
     }
 
-    private static void ShowDropLine(ItemsControl ic, DragEventArgs e, int index)
+    private static void ShowDropLine(ItemsControl ic, int index)
     {
         // Get the Y position for the line
-        double y;
-        if (index < ic.Items.Count &&
-            ic.ItemContainerGenerator.ContainerFromIndex(index) is FrameworkElement el)
-            y = el.TranslatePoint(new Point(0, 0), ic).Y - 2;
-        else if (index > 0 &&
-            ic.ItemContainerGenerator.ContainerFromIndex(index - 1) is FrameworkElement prev)
-            y = prev.TranslatePoint(new Point(0, prev.ActualHeight), ic).Y + 2;
-        else
-            y = 0;
+        double y = 0;
+        if (index < ic.ItemCount && ic.ContainerFromIndex(index) is Control el &&
+            el.TranslatePoint(new Point(0, 0), ic) is { } top)
+            y = top.Y - 2;
+        else if (index > 0 && ic.ContainerFromIndex(index - 1) is Control prev &&
+                 prev.TranslatePoint(new Point(0, prev.Bounds.Height), ic) is { } bottom)
+            y = bottom.Y + 2;
 
         // Create or update the adorner
         if (_adornerLayer is null)
         {
             _adornerLayer = AdornerLayer.GetAdornerLayer(ic);
             if (_adornerLayer is null) return;
-            _dropAdorner = new DropLineAdorner(ic);
-            _adornerLayer.Add(_dropAdorner);
+            _dropAdorner = new DropLineAdorner();
+            AdornerLayer.SetAdornedElement(_dropAdorner, ic);
+            _adornerLayer.Children.Add(_dropAdorner);
         }
 
-        _dropAdorner?.UpdateY(y, ic.ActualWidth);
+        _dropAdorner?.UpdateY(y, ic.Bounds.Width);
     }
 
     private static void HideDropLine()
     {
         if (_adornerLayer is not null && _dropAdorner is not null)
         {
-            _adornerLayer.Remove(_dropAdorner);
+            _adornerLayer.Children.Remove(_dropAdorner);
             _dropAdorner  = null;
             _adornerLayer = null;
         }
@@ -332,31 +333,27 @@ public static class DragDropBehavior
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
-    private static TaskItemViewModel? GetVm(DependencyObject? el)
+    private static TaskItemViewModel? GetVm(Visual? el)
     {
-        while (el is not null)
-        {
-            if (el is FrameworkElement { DataContext: TaskItemViewModel vm }) return vm;
-            el = VisualTreeHelper.GetParent(el);
-        }
+        // Presses on buttons, toggles and the checkbox stay clicks: the drag captures the pointer.
+        if (el?.FindAncestorOfType<Button>(includeSelf: true) is not null) return null;   // ToggleButton and CheckBox derive from Button
+        for (var v = el; v is not null; v = v.GetVisualParent())
+            if (v is StyledElement { DataContext: TaskItemViewModel vm }) return vm;
         return null;
     }
 
     // ─── DropLineAdorner ─────────────────────────────────────────────────
 
-    private sealed class DropLineAdorner : Adorner
+    private sealed class DropLineAdorner : Control
     {
         private double _y;
         private double _width;
 
-        private static readonly Brush LineBrush =
-            new SolidColorBrush(Color.FromRgb(59, 130, 246)) { Opacity = 0.9 };
-        private static readonly Pen   LinePen   = new(LineBrush, 2.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        private static readonly IBrush LineBrush =
+            new SolidColorBrush(Color.FromRgb(59, 130, 246), 0.9);
+        private static readonly Pen LinePen = new(LineBrush, 2.5, lineCap: PenLineCap.Round);
 
-        public DropLineAdorner(UIElement parent) : base(parent)
-        {
-            IsHitTestVisible = false;
-        }
+        public DropLineAdorner() => IsHitTestVisible = false;
 
         public void UpdateY(double y, double width)
         {
@@ -365,7 +362,7 @@ public static class DragDropBehavior
             InvalidateVisual();
         }
 
-        protected override void OnRender(DrawingContext dc)
+        public override void Render(DrawingContext dc)
         {
             const double circleR = 5;
             const double margin  = 14;
@@ -376,8 +373,7 @@ public static class DragDropBehavior
                 new Point(_width - margin, _y));
 
             // Circle at the left end
-            dc.DrawEllipse(LineBrush, null,
-                new Point(margin + circleR, _y), circleR, circleR);
+            dc.DrawEllipse(LineBrush, null, new Point(margin + circleR, _y), circleR, circleR);
         }
     }
 }

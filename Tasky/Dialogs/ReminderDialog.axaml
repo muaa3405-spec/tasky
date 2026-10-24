@@ -1,0 +1,94 @@
+<Window x:Class="Tasky.Dialogs.ReminderDialog"
+        Classes="toolWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Set Reminder"
+        Background="{DynamicResource AppBackground}"
+        Width="420" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Loaded="Window_Loaded">
+
+    <StackPanel Margin="24,20">
+
+        <!-- Header -->
+        <TextBlock Text="🔔  Set Reminder" FontSize="16" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,4"/>
+        <TextBlock x:Name="TaskTitleLabel" Theme="{StaticResource SubText}"
+                   TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+        <!-- ─── Date ──────────────────────────────────────────────────── -->
+        <TextBlock Text="DATE" Theme="{StaticResource LabelText}"/>
+        <CalendarDatePicker x:Name="ReminderDatePicker"
+                            Theme="{StaticResource ThemedDatePicker}"
+                            Margin="0,0,0,16"/>
+
+        <!-- ─── Time of day ────────────────────────────────────────────── -->
+        <TextBlock Text="TIME OF DAY" Theme="{StaticResource LabelText}"/>
+        <Grid Margin="0,0,0,16" ColumnDefinitions="*,12,*">
+            <ComboBox x:Name="HourBox"   Grid.Column="0" Theme="{StaticResource ThemedComboBox}"
+                      HorizontalAlignment="Stretch"/>
+            <TextBlock Grid.Column="1" Text=":" Foreground="{DynamicResource TextSecondary}"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="16"/>
+            <ComboBox x:Name="MinuteBox" Grid.Column="2" Theme="{StaticResource ThemedComboBox}"
+                      HorizontalAlignment="Stretch"/>
+        </Grid>
+
+        <!-- ─── Frequency ─────────────────────────────────────────────── -->
+        <TextBlock Text="FREQUENCY" Theme="{StaticResource LabelText}"/>
+        <ComboBox x:Name="FreqBox" Theme="{StaticResource ThemedComboBox}"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,0,0,16"
+                  SelectedIndex="0"
+                  SelectionChanged="FreqBox_SelectionChanged">
+            <ComboBoxItem Content="Once"    Tag="0"/>
+            <ComboBoxItem Content="Daily"   Tag="1"/>
+            <ComboBoxItem Content="Weekly"  Tag="2"/>
+            <ComboBoxItem Content="Monthly" Tag="3"/>
+        </ComboBox>
+
+        <!-- ─── Day of week (Weekly only) ───────────────────────────── -->
+        <StackPanel x:Name="WeekdayPanel" IsVisible="False" Margin="0,0,0,16">
+            <TextBlock Text="DAY OF WEEK" Theme="{StaticResource LabelText}"/>
+            <StackPanel Orientation="Horizontal" x:Name="WeekdayChips"/>
+        </StackPanel>
+
+        <!-- ─── Day of month (Monthly only) ──────────────────────── -->
+        <StackPanel x:Name="MonthDayPanel" IsVisible="False" Margin="0,0,0,16">
+            <TextBlock Text="DAY OF MONTH" Theme="{StaticResource LabelText}"/>
+            <ComboBox x:Name="DayOfMonthBox" Theme="{StaticResource ThemedComboBox}"
+                      HorizontalAlignment="Stretch"/>
+        </StackPanel>
+
+        <!-- ─── End date (repeating only) ─────────────────────────────── -->
+        <StackPanel x:Name="EndDatePanel" IsVisible="False" Margin="0,0,0,16">
+            <TextBlock Text="END DATE (OPTIONAL)" Theme="{StaticResource LabelText}"/>
+            <CalendarDatePicker x:Name="EndDatePicker"
+                                Theme="{StaticResource ThemedDatePicker}"/>
+        </StackPanel>
+
+        <!-- ─── Existing reminders ─────────────────────────────────────── -->
+        <StackPanel x:Name="ExistingSection" IsVisible="False" Margin="0,0,0,16">
+            <Separator/>
+            <TextBlock Text="EXISTING REMINDERS" Theme="{StaticResource LabelText}" Margin="0,8,0,6"/>
+            <TextBlock Text="Double-click a reminder to delete it."
+                       Theme="{StaticResource SubText}" Margin="0,0,0,6"/>
+            <ListBox x:Name="ExistingList" MaxHeight="110"
+                     Theme="{StaticResource PlainListBox}"
+                     Background="{DynamicResource InputBackground}"
+                     BorderBrush="{DynamicResource BorderColor}"
+                     Foreground="{DynamicResource TextPrimary}"
+                     BorderThickness="1" Padding="4"/>
+        </StackPanel>
+
+        <!-- ─── Actions ───────────────────────────────────────────────── -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,10,0" Click="Cancel_Click"/>
+            <Button Content="Save Reminder" Theme="{StaticResource PrimaryButton}"
+                    Click="Save_Click"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

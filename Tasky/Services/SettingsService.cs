@@ -14,44 +14,6 @@ public class AppSettings
     public bool    SaveScreenshotToDesktop { get; set; } = true;
 }
 
-/// <summary>Plays a notification sound by tag using Windows Media WAV files.</summary>
-public static class SoundPlayer
-{
-    private static readonly string MediaDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media");
-
-    private static readonly Dictionary<string, string> WavFiles = new()
-    {
-        ["notify"]    = "Windows Notify.wav",
-        ["nudge"]     = "Windows Message Nudge.wav",
-        ["calendar"]  = "Windows Notify Calendar.wav",
-        ["email"]     = "Windows Notify Email.wav",
-        ["proximity"] = "Windows Proximity Notification.wav",
-        ["logon"]     = "Windows Logon.wav",
-    };
-
-    public static void Play(string tag)
-    {
-        if (tag == "none") return;
-        try
-        {
-            if (WavFiles.TryGetValue(tag, out var file))
-            {
-                var fullPath = Path.Combine(MediaDir, file);
-                if (File.Exists(fullPath))
-                {
-                    using var player = new System.Media.SoundPlayer(fullPath);
-                    player.Play();
-                    return;
-                }
-            }
-            // Fallback to system exclamation if WAV not found
-            System.Media.SystemSounds.Exclamation.Play();
-        }
-        catch { }
-    }
-}
-
 public class SettingsService
 {
     private static string _path => AppPaths.SettingsFile;

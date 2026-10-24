@@ -1,0 +1,85 @@
+<Window x:Class="Tasky.Dialogs.EditTaskDialog"
+        xmlns:ctrl="using:Tasky.Controls"
+        Classes="toolWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit Task"
+        Background="{DynamicResource AppBackground}"
+        Width="440" SizeToContent="Height"
+        ShowInTaskbar="False">
+
+    <Border Theme="{StaticResource DialogFrame}">
+    <!-- Content scrolls; footer stays pinned at the bottom -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="24,20,24,0">
+    <StackPanel>
+        <TextBlock Text="Edit Task" FontSize="16" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,20"/>
+
+        <TextBlock Text="TITLE" Theme="{StaticResource LabelText}"/>
+        <TextBox x:Name="TitleBox" Theme="{StaticResource InputBox}" Margin="0,0,0,16"
+                 Watermark="Task title..."/>
+
+        <TextBlock Text="DESCRIPTION" Theme="{StaticResource LabelText}"/>
+        <!-- VerticalContentAlignment="Top" keeps placeholder at first line for multiline fields -->
+        <TextBox x:Name="DescBox" Theme="{StaticResource InputBox}"
+                 MinHeight="100" MaxHeight="260" TextWrapping="Wrap" AcceptsReturn="True"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,16"
+                 VerticalContentAlignment="Top"
+                 Watermark="Description (optional)..."/>
+
+        <TextBlock Text="START DATE" Theme="{StaticResource LabelText}"/>
+        <CalendarDatePicker x:Name="DueDatePicker"
+                            Theme="{StaticResource ThemedDatePicker}"
+                            Margin="0,0,0,16"/>
+
+        <TextBlock Text="GROUP" Theme="{StaticResource LabelText}"/>
+        <!-- HorizontalContentAlignment="Left" keeps dot+name left-aligned in the picker -->
+        <ComboBox x:Name="GroupPicker" Theme="{StaticResource ThemedComboBox}"
+                  HorizontalContentAlignment="Left"
+                  Margin="0,0,0,16"/>
+
+        <TextBlock Text="RECURRENCE" Theme="{StaticResource LabelText}"/>
+        <ComboBox x:Name="RecurrencePicker" Theme="{StaticResource ThemedComboBox}"
+                  Margin="0,0,0,24" SelectedIndex="0">
+            <ComboBoxItem Content="None"    Tag="0"/>
+            <ComboBoxItem Content="Daily"   Tag="1"/>
+            <ComboBoxItem Content="Weekly"  Tag="2"/>
+            <ComboBoxItem Content="Monthly" Tag="3"/>
+        </ComboBox>
+
+        <TextBlock Text="ATTACHMENTS" Theme="{StaticResource LabelText}"/>
+        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                CornerRadius="6" Padding="10" Margin="0,0,0,24">
+            <StackPanel>
+                <TextBlock x:Name="NoAttachLabel" Text="No attachments yet."
+                           Foreground="{DynamicResource TextSecondary}"
+                           FontSize="12" Opacity="0.7"/>
+                <WrapPanel x:Name="AttachThumbs"/>
+                <Button x:Name="AddAttachBtn" Content="&#x1F4CE;  Add Image"
+                        Theme="{StaticResource SecondaryButton}"
+                        HorizontalAlignment="Left" Margin="0,10,0,0"
+                        Padding="12,6" FontSize="12"
+                        Click="AddAttachment_Click"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+    </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="24,0,24,20">
+            <Button Content="Cancel" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,10,0" Click="Cancel_Click"/>
+            <Button Content="Save Changes" Theme="{StaticResource PrimaryButton}"
+                    Click="Save_Click"/>
+        </StackPanel>
+    <!-- Dotted resize grip in the bottom-right corner, as on Windows -->
+    <ctrl:ResizeGrip Grid.RowSpan="2"/>
+    </Grid>
+    </Border>
+</Window>

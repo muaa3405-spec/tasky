@@ -1,0 +1,57 @@
+<Window x:Class="Tasky.Dialogs.ConfirmDialog"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tasky"
+        Background="{DynamicResource AppBackground}"
+        Width="380" SizeToContent="Height"
+        SystemDecorations="None" TransparencyLevelHint="Transparent"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        PointerPressed="Window_PointerPressed">
+
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource BorderColor}"
+            BorderThickness="1" CornerRadius="12"
+            Padding="28,24">
+        <Border.Effect>
+            <DropShadowDirectionEffect BlurRadius="24" ShadowDepth="6" Opacity="0.3" Color="#000"/>
+        </Border.Effect>
+
+        <StackPanel>
+            <!-- Icon -->
+            <TextBlock x:Name="IconLabel" FontSize="36"
+                       HorizontalAlignment="Center" Margin="0,0,0,12"/>
+
+            <!-- Title -->
+            <TextBlock x:Name="TitleLabel"
+                       FontSize="16" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8"/>
+
+            <!-- Message -->
+            <TextBlock x:Name="MessageLabel"
+                       FontSize="13"
+                       Foreground="{DynamicResource TextSecondary}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,24"/>
+
+            <!-- Buttons -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="CancelBtn" Content="Cancel"
+                        Theme="{StaticResource SecondaryButton}"
+                        MinWidth="100" Margin="0,0,12,0"
+                        Click="Cancel_Click"/>
+                <Button x:Name="ConfirmBtn"
+                        Theme="{StaticResource PrimaryButton}"
+                        MinWidth="100"
+                        Click="Confirm_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

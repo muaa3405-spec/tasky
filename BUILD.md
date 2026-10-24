@@ -1,15 +1,22 @@
 # Tasky – Build & Install Guide
 
+Tasky is one app for **Windows and macOS**. The UI is built with
+[Avalonia](https://avaloniaui.net) (XAML, like WPF), so the same code and the same
+design run on both systems. Features that need the operating system (tray icon,
+global shortcut, idle detection, app usage, clipboard images, sounds) have a
+Windows and a macOS implementation under `Tasky/Platform/`.
+
 ## Prerequisites
 
-| Tool | Download |
-|------|----------|
-| .NET 8 SDK (x64) | https://dotnet.microsoft.com/download/dotnet/8.0 |
-| Visual Studio 2022 (Community+) **or** VS Code with C# Dev Kit | https://visualstudio.microsoft.com |
-| Inno Setup 6 (for the installer only) | https://jrsoftware.org/isdl.php |
+| Tool | Needed for | Download |
+|------|------------|----------|
+| .NET 8 SDK | building and running (Windows or macOS) | https://dotnet.microsoft.com/download/dotnet/8.0 |
+| Visual Studio 2022, Rider or VS Code with C# Dev Kit | editing (optional) | |
+| Inno Setup 6 | the Windows installer only (Windows) | https://jrsoftware.org/isdl.php |
+| Xcode Command Line Tools | the macOS app bundle only (`xcode-select --install`) | |
 
-> **Windows SDK target:** The project targets `net8.0-windows10.0.19041.0` (Windows 10 v2004 or later).  
-> Windows 11 is fully supported. Windows 10 19041+ required for WinRT toast notifications.
+Supported systems: Windows 10 (version 2004) or later, 64-bit, and macOS 12 or later
+(Apple silicon and Intel).
 
 ---
 
@@ -19,140 +26,143 @@
 Tasky/
 ├── Tasky.sln
 ├── Tasky/
-│   ├── Tasky.csproj            ← .NET 8 WPF + WinForms, x64
-│   ├── App.xaml / .cs          ← Startup, single-instance, tray bootstrap
-│   ├── MainWindow.xaml / .cs   ← Main UI + system tray + event handlers
-│   ├── Assets/
-│   │   ├── icon.ico            ← App + tray icon; replace with your own .ico
-│   │   ├── tasky-logo.png      ← Logo used in the UI
-│   │   └── notification-banner.png ← Image shown in Windows notifications
-│   ├── Models/                 ← TaskItem, ReminderItem (plain C# classes)
-│   ├── Services/
-│   │   ├── DatabaseService.cs  ← SQLite persistence (stores in %AppData%\Tasky\tasky.db)
-│   │   ├── HotkeyService.cs    ← Win32 RegisterHotKey (Win+Shift+T)
-│   │   ├── NotificationService.cs ← Windows toast via Microsoft.Toolkit.Uwp.Notifications
-│   │   └── ReminderSchedulerService.cs ← Background timer, fires toast notifications
-│   ├── ViewModels/
-│   │   ├── MainViewModel.cs    ← Task list, add/complete/delete/active logic
-│   │   ├── TaskItemViewModel.cs ← Wraps TaskItem + live Pomodoro DispatcherTimer
-│   │   └── RelayCommand.cs     ← Lightweight ICommand implementation
-│   ├── Converters/             ← XAML value converters (strikethrough, visibility, etc.)
-│   ├── Behaviors/
-│   │   └── DragDropBehavior.cs ← Drag-to-reorder attached behavior for ItemsControl
-│   ├── Windows/
-│   │   ├── QuickAddWindow      ← Win+Shift+T floating input
-│   │   └── WidgetWindow        ← Always-on-top compact bar
-│   ├── Dialogs/
-│   │   ├── EditTaskDialog      ← Edit title & description
-│   │   └── ReminderDialog      ← Set time / frequency / end-date reminder
+│   ├── Tasky.csproj            ← .NET 8 + Avalonia, one project for Windows and macOS
+│   ├── Program.cs              ← entry point, fonts
+│   ├── App.axaml / .cs         ← startup, single-instance, theme, services
+│   ├── MainWindow.axaml / .cs  ← main UI + tray + event handlers
+│   ├── Assets/                 ← icon.ico (Windows), tasky-logo.png
+│   ├── Models/                 ← TaskItem, ReminderItem, Note… (plain C# classes)
+│   ├── Services/               ← database, reminders, idle monitor, app usage, migration…
+│   ├── Platform/               ← one interface per OS feature
+│   │   ├── PlatformServices.cs ← picks the Windows or macOS implementation at start-up
+│   │   ├── Windows/            ← Win32: tray icon, Win+Shift+T, idle, clipboard, sounds…
+│   │   └── MacOS/              ← AppKit / Carbon: menu-bar icon, Ctrl+Option+T, idle, clipboard…
+│   ├── ViewModels/             ← MainViewModel, TaskItemViewModel, RelayCommand
+│   ├── Behaviors/              ← drag-to-reorder for the task list
+│   ├── Controls/ Dialogs/ Windows/   ← the other screens
+│   ├── Helpers/                ← shared UI helpers (animations, file pickers, images…)
 │   └── Resources/
-│       └── Styles.xaml         ← All WPF styles, colours, converters as StaticResources
-└── installer/
-    └── setup.iss               ← Inno Setup 6 script → produces TaskySetup.exe
+│       ├── DarkTheme.axaml / LightTheme.axaml  ← colour palettes
+│       └── Styles.axaml        ← all control styles
+├── installer/setup.iss         ← Inno Setup 6 script → TaskySetup.exe (Windows)
+└── scripts/package-macos.sh    ← builds Tasky.app and Tasky.dmg (macOS)
 ```
 
 ---
 
-## Step 1 – Restore & Build (Debug)
+## Build & Run (Windows or macOS)
 
-```powershell
-cd Tasky          # the folder containing Tasky.sln
-dotnet restore
-dotnet build -c Debug
-```
-
-Or open `Tasky.sln` in Visual Studio 2022 → **Build → Build Solution**.
-
----
-
-## Step 2 – Run
-
-```powershell
+```bash
 dotnet run --project Tasky/Tasky.csproj
 ```
 
-Or press **F5** in Visual Studio.
+Or open `Tasky.sln` in Visual Studio / Rider and press **F5**.
 
 ### First-run notes
-- The SQLite database is created automatically at `%AppData%\Tasky\tasky.db`.
-- A system tray icon appears (blue square with a "T").
-- The global hotkey **Win + Shift + T** opens the Quick Add window from anywhere.
+- The database is created automatically (see [Data Location](#data-location)).
+- A tray icon appears (Windows notification area / macOS menu bar).
+- The Quick Add shortcut opens a small input window from anywhere:
+  **Win + Shift + T** on Windows, **Control + Option + T** on macOS
+  (Cmd + Shift + T is avoided because browsers use it to reopen tabs).
 
 ---
 
-## Step 3 – Publish (self-contained, no install required)
+## Publish (self-contained, no .NET install needed on the target)
 
-```powershell
-dotnet publish Tasky/Tasky.csproj \
-    -c Release \
-    -r win-x64 \
-    --self-contained true \
-    -o Tasky/bin/Release/net8.0-windows10.0.19041.0/win-x64/publish
+```bash
+# Windows (64-bit)
+dotnet publish Tasky/Tasky.csproj -c Release -r win-x64     -o publish/win-x64
+
+# macOS — Apple silicon / Intel
+dotnet publish Tasky/Tasky.csproj -c Release -r osx-arm64   -o publish/osx-arm64
+dotnet publish Tasky/Tasky.csproj -c Release -r osx-x64     -o publish/osx-x64
 ```
 
-This produces a folder with `Tasky.exe` plus all required DLLs.  
-Copy the entire `publish/` folder to any Windows 10+ machine and run `Tasky.exe` – no .NET runtime needed on the target.
+The Windows folder contains `Tasky.exe` plus its DLLs; copy it anywhere and run it.
 
 ---
 
-## Step 4 – Build the Windows Installer
+## Windows Installer (Inno Setup)
 
-1. Install **Inno Setup 6** on your machine.
-2. Open `installer\setup.iss` in the Inno Setup IDE (or run from the command line):
+1. Publish for Windows into the folder the script expects:
 
-```cmd
-"C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer\setup.iss
-```
+   ```powershell
+   dotnet publish Tasky/Tasky.csproj -c Release -r win-x64 -o Tasky/bin/Release/net8.0/win-x64/publish
+   ```
 
-3. The installer appears at `installer\Output\TaskySetup.exe`.
-4. Run `TaskySetup.exe` on any Windows 10/11 x64 machine – it installs to  
+2. Compile the installer:
+
+   ```cmd
+   "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer\setup.iss
+   ```
+
+3. The installer appears at `installer\Output\TaskySetup.exe`. It installs to
    `%ProgramFiles%\Tasky\` and optionally adds a desktop shortcut and a startup entry.
 
 ---
 
-## Toast Notifications – Important Note
+## macOS App (`Tasky.app` and `Tasky.dmg`)
 
-`Microsoft.Toolkit.Uwp.Notifications` requires the app to have an **Application User Model ID (AUMID)** registered in the Start Menu to fire toast notifications reliably.
+Run on a Mac:
 
-- **When installed via the Inno Setup installer:** this is handled automatically because the Start Menu shortcut created by the installer gives the app a proper AUMID.  
-- **When running directly from `dotnet run` or the publish folder:** the Toolkit's `ToastNotificationManagerCompat` registers a temporary AUMID automatically for unpackaged Win32 apps (it writes a COM registration to the registry). This works on Windows 10 19041+ without MSIX packaging.
-- If toasts still don't appear, ensure **Focus Assist** / **Do Not Disturb** is off, and that "Notifications from apps" is enabled in Windows Settings → System → Notifications.
-
----
-
-## Customising the Hotkey
-
-Open `App.xaml.cs` and change the modifiers / key in the `Hotkey.Register(...)` call:
-
-```csharp
-// Current: Win + Shift + T
-Hotkey.Register(HotkeyService.MOD_WIN | HotkeyService.MOD_SHIFT, (uint)'T', ...);
-
-// Example: Ctrl + Alt + Q
-Hotkey.Register(HotkeyService.MOD_CTRL | HotkeyService.MOD_ALT, (uint)'Q', ...);
+```bash
+./scripts/package-macos.sh          # Apple silicon (arm64)
+./scripts/package-macos.sh x64      # Intel
 ```
 
-Virtual key codes are standard Windows VK codes (`'A'`–`'Z'`, `0x70`–`0x7B` for F1–F12, etc.).
+The script publishes Tasky, wraps it in `dist/Tasky.app` (with its icon and
+`Info.plist`), signs it ad hoc so it runs on your own Mac, and builds `dist/Tasky.dmg`.
+
+To give the app to other people without the "unidentified developer" warning, sign it
+with an Apple Developer ID and notarize it (needs a paid Apple Developer account):
+
+```bash
+codesign --force --deep --options runtime --sign "Developer ID Application: <Your Name>" dist/Tasky.app
+xcrun notarytool submit dist/Tasky.dmg --keychain-profile <profile> --wait
+xcrun stapler staple dist/Tasky.dmg
+```
+
+Tasky needs **no special macOS permissions**: idle time, the frontmost app name, the
+clipboard and the global shortcut all work without Accessibility or Screen Recording access.
+To start Tasky at login, add it under **System Settings → General → Login Items**.
 
 ---
 
-## Replacing the Tray Icon
+## Windows and macOS differences
 
-1. Create or source a 16×16 and/or 32×32 `.ico` file.
-2. Drop it at `Tasky/Assets/icon.ico` (overwrite).
-3. Rebuild – the icon is embedded as a WPF Resource and also referenced by the `.csproj` `<ApplicationIcon>` property.
+The screens, layout, colours and behaviour are the same on both systems. Where an
+OS works differently:
+
+| Feature | Windows | macOS |
+|---------|---------|-------|
+| Tray icon | Notification area, double-click to open, balloon tips | Menu bar icon with the same menu; no balloon tips (macOS has none) |
+| Quick Add shortcut | Win + Shift + T | Control + Option + T |
+| Paste shortcut | Ctrl + V | ⌘ V |
+| Reminder sounds | Windows Media sounds | Built-in macOS alert sounds (Glass, Ping…) |
+| Meeting hours | Detected from microphone / camera use | Not available, so the Meeting cards are hidden |
+| App usage | Foreground window, including browser web apps | Frontmost application |
+| Emoji icons | Single-colour outlines (as always) | Apple's colour emoji |
+| Close button | Hides to the tray | Hides; click the Dock or menu-bar icon to bring it back |
+
+---
+
+## Replacing the Icons
+
+- **Windows:** replace `Tasky/Assets/icon.ico` (used for `Tasky.exe`, the window and the tray).
+- **macOS:** replace `Tasky/Assets/tasky-logo.png` (512×512 or larger); the packaging
+  script turns it into the app icon.
 
 ---
 
 ## Data Location
 
-All task data is stored in:
+| System | Data (database, settings, attachments) | Logs and import safety copies |
+|--------|----------------------------------------|-------------------------------|
+| Windows | `%APPDATA%\Tasky\` | `%LOCALAPPDATA%\Tasky\` |
+| macOS | `~/Library/Application Support/Tasky/` | `~/Library/Application Support/Tasky Local/` |
 
-```
-%APPDATA%\Tasky\tasky.db      (SQLite)
-```
-
-To move everything to another PC, use **Settings → Migrate to another computer**
+The database is `tasky.db` (SQLite). To move everything to another computer —
+including from Windows to macOS and back — use **Settings → Migrate to another computer**
 (see the README).
 
 ### Testing with sandbox data
@@ -166,23 +176,25 @@ $env:TASKY_DATA_ROOT = "$env:TEMP\tasky-sandbox"
 dotnet run --project Tasky/Tasky.csproj
 ```
 
+```bash
+TASKY_DATA_ROOT="$TMPDIR/tasky-sandbox" dotnet run --project Tasky/Tasky.csproj
+```
+
 ---
 
 ## Feature Reference
 
 | Feature | How it works |
 |---------|-------------|
-| Minimize to tray | `Window_Closing` cancels close and calls `Hide()`; tray icon stays visible |
-| Restore from tray | Double-click tray icon or "Open Tasky" context menu item |
-| Win+Shift+T hotkey | `HotkeyService` calls `RegisterHotKey` via P/Invoke on the main window HWND |
-| Quick-Add window | `QuickAddWindow` — borderless, transparent, `Topmost`, closes on `Escape` or `Deactivated` |
-| Drag-to-reorder | `DragDropBehavior` attached property on `ItemsControl` using WPF DragDrop API |
-| Strikethrough on complete | `BoolToStrikethroughConverter` bound to `IsCompleted` |
+| Minimize to tray | `Window_Closing` cancels the close and hides the window; the tray icon stays |
+| Restore from tray | Double-click the tray icon (Windows), the "Open Tasky" menu item, or the Dock icon (macOS) |
+| Quick Add shortcut | `IGlobalHotkey`: Win32 `RegisterHotKey` on Windows, Carbon `RegisterEventHotKey` on macOS |
+| Quick-Add window | `QuickAddWindow` — borderless, transparent, topmost, closes on Escape or when it loses focus |
+| Drag-to-reorder | `DragDropBehavior` attached property on the task `ItemsControl` (pointer capture, ghost card, drop line) |
 | Active task green highlight | `ActiveToBackgroundConverter` bound to `IsActive` |
-| Pomodoro timer | `DispatcherTimer` in `TaskItemViewModel`, ticks every 1 s while `IsActive = true` |
-| Compact widget | `WidgetWindow` — `WindowStyle=None`, `AllowsTransparency=True`, `Topmost=True`, bottom-right corner |
-| Reminders | `ReminderDialog` stores in SQLite; `ReminderSchedulerService` polls every 30 s |
-| Toast notifications | `Microsoft.Toolkit.Uwp.Notifications` (Win32-compatible) |
-| Completed auto-hide | `MainViewModel.CompleteTask` moves VM from `Tasks` → `CompletedTasks`; shown via toggle |
-| SQLite persistence | `DatabaseService` in `%AppData%\Tasky\tasky.db`; WAL mode for concurrency |
-| Single instance | Named `Mutex` in `App.OnStartup`; second launch shows a message and exits |
+| Timer | `DispatcherTimer` in `TaskItemViewModel` refreshes the display every second; time comes from the clock |
+| Reminders | `ReminderDialog` stores them in SQLite; `ReminderSchedulerService` checks every minute |
+| Reminder pop-ups | `ReminderToastWindow`, Tasky's own themed window (bottom-right of the screen) |
+| Idle / lock / sleep pause | `IdleMonitorService` + `IUserActivity` (Windows session events / macOS polling) |
+| SQLite persistence | `DatabaseService`, WAL mode |
+| Single instance | Named mutex; a second launch signals the first (named event on Windows, local pipe on macOS) and exits |

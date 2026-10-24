@@ -131,9 +131,9 @@ public sealed class MigrationService
     /// <summary>Starts a fresh Tasky that waits for this one to exit, then closes this one.</summary>
     public static void RestartTasky()
     {
-        var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot find Tasky.exe");
+        var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot find the Tasky executable");
         Process.Start(new ProcessStartInfo(exe, $"{WaitForPidArg} {Environment.ProcessId}") { UseShellExecute = false });
-        System.Windows.Application.Current.Shutdown();
+        App.Shutdown();
     }
 
     public const string WaitForPidArg = "--wait-for-pid";

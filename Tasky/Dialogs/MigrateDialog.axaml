@@ -1,0 +1,190 @@
+<Window x:Class="Tasky.Dialogs.MigrateDialog"
+        Classes="toolWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Migrate to another computer"
+        Background="{DynamicResource AppBackground}"
+        Width="480" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <!-- Big option card shared by "Export" and "Import" on the first step -->
+        <ControlTheme x:Key="MigrateOptionButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bd" Background="{DynamicResource CardBackground}"
+                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                            CornerRadius="8" Padding="16,14">
+                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBlue}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Theme="{StaticResource DialogFrame}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
+    <Grid>
+
+        <!-- ── Step 1: choose direction ─────────────────────────────────── -->
+        <StackPanel x:Name="ChooseStep">
+            <TextBlock Text="Migrate to another computer" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+            <TextBlock x:Name="IntroText" Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,0,0,18"
+                       Text="Move everything to a new PC in one password-protected file: tasks, completed history, groups, notes, reminders, attachments, reports and settings."/>
+
+            <Button Theme="{StaticResource MigrateOptionButton}" Click="ChooseExport_Click" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📤" FontSize="22" Margin="0,0,14,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Export from this computer" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                        <TextBlock Text="Create an encrypted migration file" Theme="{StaticResource SubText}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+
+            <Button Theme="{StaticResource MigrateOptionButton}" Click="ChooseImport_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📥" FontSize="22" Margin="0,0,14,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Import on this computer" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                        <TextBlock Text="Restore everything from a migration file" Theme="{StaticResource SubText}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Close" Theme="{StaticResource SecondaryButton}" Click="Close_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ── Step 2a: export password ─────────────────────────────────── -->
+        <StackPanel x:Name="ExportStep" IsVisible="False">
+            <TextBlock Text="📤  Export from this computer" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+            <Border Background="{DynamicResource CardBackground}" BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="INCLUDED" Theme="{StaticResource LabelText}"/>
+                    <TextBlock x:Name="ExportSummary" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                    <TextBlock Text="…plus your settings, recycle bin, reports history and missed notifications."
+                               Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="CREATE A PASSWORD" Theme="{StaticResource LabelText}"/>
+            <TextBox x:Name="ExportPassword" Theme="{StaticResource PasswordInput}" Margin="0,0,0,10"
+                     TextChanged="ExportPassword_Changed"/>
+            <TextBlock Text="CONFIRM PASSWORD" Theme="{StaticResource LabelText}"/>
+            <TextBox x:Name="ExportPasswordConfirm" Theme="{StaticResource PasswordInput}" Margin="0,0,0,6"
+                     TextChanged="ExportPassword_Changed"/>
+            <TextBlock x:Name="ExportPasswordHint" Theme="{StaticResource SubText}" TextWrapping="Wrap"
+                       Margin="0,0,0,12"/>
+
+            <Border Background="#1AF59E0B" BorderBrush="#F59E0B" BorderThickness="1"
+                    CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextPrimary}"
+                           Text="⚠  Remember this password. The file is encrypted with it and cannot be opened without it — there is no way to recover a forgotten password."/>
+            </Border>
+            <TextBlock x:Name="ExportError" Foreground="#EF4444" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="False" Margin="0,4,0,0"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Back" Theme="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="Back_Click"/>
+                <Button x:Name="ExportButton" Content="Choose where to save…" Theme="{StaticResource PrimaryButton}"
+                        IsEnabled="False" Click="Export_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ── Step 2b: import file + password ──────────────────────────── -->
+        <StackPanel x:Name="ImportStep" IsVisible="False">
+            <TextBlock Text="📥  Import on this computer" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+            <TextBlock Text="MIGRATION FILE" Theme="{StaticResource LabelText}"/>
+            <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+                <Border Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderColor}"
+                        BorderThickness="1" CornerRadius="6" Padding="10,8">
+                    <TextBlock x:Name="ImportFileLabel" Text="No file selected" TextTrimming="CharacterEllipsis"
+                               FontSize="13" Foreground="{DynamicResource TextSecondary}"/>
+                </Border>
+                <Button Grid.Column="1" Content="Browse…" Theme="{StaticResource SecondaryButton}"
+                        Margin="8,0,0,0" Click="BrowseImport_Click"/>
+            </Grid>
+
+            <TextBlock Text="PASSWORD" Theme="{StaticResource LabelText}"/>
+            <TextBox x:Name="ImportPassword" Theme="{StaticResource PasswordInput}" Margin="0,0,0,6"
+                     TextChanged="ImportInput_Changed" KeyDown="ImportPassword_KeyDown"/>
+            <TextBlock x:Name="ImportError" Foreground="#EF4444" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="False" Margin="0,4,0,0"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Back" Theme="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="Back_Click"/>
+                <Button x:Name="UnlockButton" Content="Unlock" Theme="{StaticResource PrimaryButton}"
+                        IsEnabled="False" Click="Unlock_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ── Step 3: confirm import ───────────────────────────────────── -->
+        <StackPanel x:Name="ConfirmImportStep" IsVisible="False">
+            <TextBlock Text="✔  File unlocked" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+            <Border Background="{DynamicResource CardBackground}" BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,14">
+                <StackPanel>
+                    <TextBlock x:Name="ImportCreatedLabel" Theme="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="ImportSummary" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Background="#1AF59E0B" BorderBrush="#F59E0B" BorderThickness="1"
+                    CornerRadius="6" Padding="12,8">
+                <TextBlock x:Name="ReplaceWarning" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource TextPrimary}"/>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Cancel" Theme="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="CancelImport_Click"/>
+                <Button Content="Import and restart Tasky" Theme="{StaticResource PrimaryButton}" Click="ConfirmImport_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ── Working ───────────────────────────────────────────────────── -->
+        <StackPanel x:Name="WorkingStep" IsVisible="False" Margin="0,24">
+            <TextBlock x:Name="WorkingLabel" FontSize="14" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,14"/>
+            <ProgressBar Theme="{StaticResource PlainProgressBar}"
+                         IsIndeterminate="True" Height="4" Foreground="{DynamicResource PrimaryBlue}"
+                         Background="{DynamicResource BorderColor}" BorderThickness="0"/>
+        </StackPanel>
+
+        <!-- ── Done (export) ────────────────────────────────────────────── -->
+        <StackPanel x:Name="DoneStep" IsVisible="False">
+            <TextBlock Text="✔  Migration file created" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,10"/>
+            <TextBlock x:Name="DoneLabel" TextWrapping="Wrap" FontSize="13"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,10"/>
+            <TextBlock Theme="{StaticResource SubText}" TextWrapping="Wrap"
+                       Text="Copy it to the new computer (USB stick, network drive…), install Tasky there and choose Settings → Migrate to another computer → Import."/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                <Button Content="Show in folder" Theme="{StaticResource SecondaryButton}" Margin="0,0,10,0"
+                        Click="ShowInFolder_Click"/>
+                <Button Content="Done" Theme="{StaticResource PrimaryButton}" Click="Close_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+    </Grid>
+    </ScrollViewer>
+    </Border>
+</Window>

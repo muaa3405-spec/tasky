@@ -1,0 +1,22 @@
+<UserControl x:Class="Tasky.Controls.AttachmentsPanel"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             DragDrop.AllowDrop="True">
+
+    <!-- Thumbnails of attached files + "Add files". Paste and drag-and-drop also work. -->
+    <Border x:Name="Frame" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+            CornerRadius="6" Padding="10" Background="Transparent">
+        <StackPanel>
+            <TextBlock x:Name="EmptyLabel" Text="No attachments yet."
+                       Foreground="{DynamicResource TextSecondary}" FontSize="12" Opacity="0.7"/>
+            <WrapPanel x:Name="Thumbs"/>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button Content="&#x1F4CE;  Add files" Theme="{StaticResource SecondaryButton}"
+                        Padding="12,6" FontSize="12" Click="AddFiles_Click"/>
+                <!-- Text set in code: the paste shortcut differs by OS (Ctrl+V / ⌘V) -->
+                <TextBlock x:Name="PasteHintLabel" VerticalAlignment="Center"
+                           Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource TextSecondary}"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

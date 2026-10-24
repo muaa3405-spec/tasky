@@ -1,0 +1,78 @@
+<Window x:Class="Tasky.Dialogs.AttachmentDialog"
+        Classes="toolWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Attachments" Width="540" Height="500"
+        Background="{DynamicResource AppBackground}"
+        WindowStartupLocation="CenterOwner"
+        DragDrop.AllowDrop="True">
+
+    <Window.Styles>
+        <Style Selector="Border#DropZone:pointerover">
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="18,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="140"/>   <!-- paste/drop zone -->
+            <RowDefinition Height="Auto"/>  <!-- saved label -->
+            <RowDefinition Height="*"/>     <!-- saved grid -->
+            <RowDefinition Height="Auto"/>  <!-- footer buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock x:Name="HeaderLabel" FontSize="15" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ── Paste / Drop zone (colours change in code while dragging) ── -->
+        <Border Grid.Row="1" x:Name="DropZone"
+                BorderThickness="2" CornerRadius="10"
+                BorderBrush="#374151" Background="#1F2937"
+                Cursor="Hand"
+                PointerReleased="DropZone_Click">
+
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="DropIcon" Text="📋"
+                           FontSize="32" HorizontalAlignment="Center"/>
+                <!-- Text set in code: the paste shortcut differs by OS (Ctrl+V / ⌘V) -->
+                <TextBlock x:Name="DropTitle"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimary}"
+                           HorizontalAlignment="Center" Margin="0,10,0,4"/>
+                <TextBlock Text="PNG, JPG, GIF, BMP, WEBP"
+                           FontSize="11" Foreground="{DynamicResource TextSecondary}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Saved attachments label -->
+        <TextBlock Grid.Row="2" x:Name="SavedLabel"
+                   Text="SAVED ATTACHMENTS" Theme="{StaticResource LabelText}"
+                   Margin="0,14,0,6" IsVisible="False"/>
+
+        <!-- Saved attachments grid -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <WrapPanel x:Name="AttachPanel" Orientation="Horizontal"/>
+        </ScrollViewer>
+
+        <!-- Empty saved state -->
+        <TextBlock Grid.Row="3" x:Name="NoAttachLabel"
+                   Text="No attachments yet."
+                   Theme="{StaticResource SubText}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   IsVisible="False"/>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal"
+                    Margin="0,12,0,0" HorizontalAlignment="Right">
+            <Button Content="📎 Browse Files" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,8,0" Click="AddFile_Click"/>
+            <Button Content="Close" Theme="{StaticResource SecondaryButton}"
+                    Click="Close_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

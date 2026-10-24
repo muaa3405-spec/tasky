@@ -2,40 +2,41 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- Windows 10 2004+ TFM enables WinRT APIs for toast notifications -->
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <!-- Windows Forms needed for NotifyIcon (system tray) -->
-    <UseWindowsForms>true</UseWindowsForms>
+    <!-- One cross-platform build: Avalonia UI runs the same app on Windows and macOS.
+         Windows-only and macOS-only features live under Platform/ and are chosen at runtime. -->
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>Tasky</RootNamespace>
     <AssemblyName>Tasky</AssemblyName>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Platforms>x64</Platforms>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Optimize>true</Optimize>
     <!-- Embed runtime so publish = single folder, no separate install needed -->
     <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <PublishSingleFile>false</PublishSingleFile>
-    <Optimize>true</Optimize>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <!-- SQLite for local persistence -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
-    <!-- Windows Community Toolkit – Win32 toast notification helper -->
-    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <!-- Windows: lock / sleep / theme-change notifications -->
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
+    <!-- Windows: extracting app icons for the App Usage panel -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Icons embedded as WPF resources -->
-    <Resource Include="Assets\icon.ico" />
-    <Resource Include="Assets\tasky-logo.png" />
-    <!-- Notification banner must be a loose file (not embedded) so the
-         Windows notification system can load it by absolute file:// path -->
+    <AvaloniaResource Include="Assets\icon.ico" />
+    <AvaloniaResource Include="Assets\tasky-logo.png" />
     <Content Include="Assets\notification-banner.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

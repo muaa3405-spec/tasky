@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 
 namespace Tasky.Services;
@@ -10,6 +11,7 @@ namespace Tasky.Services;
 /// (meaning audio is actually flowing, not just that the app has permission).
 /// Falls back to a registry + process check if the audio session API fails.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class MeetingMonitorService : IDisposable
 {
     private readonly DatabaseService _db;

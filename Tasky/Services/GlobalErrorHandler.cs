@@ -1,6 +1,4 @@
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
+using Avalonia.Threading;
 
 namespace Tasky.Services;
 
@@ -19,9 +17,9 @@ public static class GlobalErrorHandler
     private static readonly TimeSpan FatalSaveTimeout = TimeSpan.FromSeconds(3);
 
     /// <param name="saveWork">Called before a fatal error ends the process.</param>
-    public static void Register(Application app, Action saveWork)
+    public static void Register(Action saveWork)
     {
-        app.DispatcherUnhandledException += (_, e) =>
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             CrashLog.Write("Unhandled UI error (recovered)", e.Exception);
             e.Handled = true;
@@ -38,7 +36,11 @@ public static class GlobalErrorHandler
         {
             CrashLog.Write("Fatal error", e.ExceptionObject);
             // Best effort, and never wait forever on a UI thread that may itself be stuck.
-            try { app.Dispatcher.Invoke(saveWork, DispatcherPriority.Send, CancellationToken.None, FatalSaveTimeout); }
+            try
+            {
+                if (Dispatcher.UIThread.CheckAccess()) saveWork();
+                else Dispatcher.UIThread.InvokeAsync(saveWork, DispatcherPriority.Send).Wait(FatalSaveTimeout);
+            }
             catch { /* nothing more we can do */ }
         };
     }
