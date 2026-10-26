@@ -1,0 +1,17 @@
+<UserControl x:Class="Tasky.Controls.PendingAttachmentsPanel"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             DragDrop.AllowDrop="True">
+
+    <!-- Attachments chosen for an item that is not saved yet: button + hint, then thumbnails -->
+    <StackPanel>
+        <StackPanel Orientation="Horizontal">
+            <Button Content="&#x1F4CE;  Attach files" Theme="{StaticResource SecondaryButton}"
+                    Padding="12,6" FontSize="12" Click="AttachFiles_Click"/>
+            <!-- Text set in code: the paste shortcut differs by OS (Ctrl+V / ⌘V) -->
+            <TextBlock x:Name="PasteHintLabel" Margin="10,0,0,0" VerticalAlignment="Center"
+                       FontSize="11" Foreground="{DynamicResource TextSecondary}" Opacity="0.6"/>
+        </StackPanel>
+        <WrapPanel x:Name="Thumbs" IsVisible="False" Margin="0,8,0,0"/>
+    </StackPanel>
+</UserControl>

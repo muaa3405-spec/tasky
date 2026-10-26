@@ -1,9 +1,5 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
-using Avalonia.VisualTree;
 using Tasky.Helpers;
 using Tasky.Platform;
 using Tasky.Services;
@@ -35,7 +31,6 @@ public partial class NoteDetailDialog : Window
         InitializeComponent();
         ThemeHelper.Attach(this);
         DialogLayoutHelper.FitToWorkArea(this);
-        AddHandler(KeyDownEvent, Window_PreviewKeyDown, RoutingStrategies.Tunnel);
 
         // Load current values — suppress dirty-tracking during initial load
         _isDirty = false;
@@ -48,6 +43,7 @@ public partial class NoteDetailDialog : Window
         Attachments.FilesAdded      += AttachFiles;
         Attachments.ImagePasted     += AttachPastedImage;
         Attachments.DeleteRequested += RemoveAttachment;
+        Attachments.AcceptAttachmentsAnywhereIn(this);
         ReloadAttachments();
     }
 
@@ -84,43 +80,6 @@ public partial class NoteDetailDialog : Window
         if (await confirm.ShowDialog<bool?>(this) != true) return;
         _vm.DeleteNoteAttachment(noteAttachment);
         ReloadAttachments();
-    }
-
-    /// <summary>
-    /// Ctrl+V / ⌘V attaches a copied image or files. While typing in a text box, a
-    /// clipboard that holds text still pastes as text.
-    /// </summary>
-    private void Window_PreviewKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (!KeyGestures.IsPaste(e)) return;
-        if (e.Source is Visual source && source.FindAncestorOfType<TextBox>(includeSelf: true) is { } textBox)
-        {
-            // Whether the clipboard holds text can only be read asynchronously,
-            // so take over the paste and decide once it is known.
-            e.Handled = true;
-            PasteIntoTextBoxOrAttach(textBox);
-            return;
-        }
-        e.Handled = Attachments.TryPaste();
-    }
-
-    private async void PasteIntoTextBoxOrAttach(TextBox textBox)
-    {
-        if (await ClipboardHasTextAsync()) textBox.Paste();
-        else Attachments.TryPaste();
-    }
-
-    private async Task<bool> ClipboardHasTextAsync()
-    {
-        try
-        {
-            var clipboard = Clipboard;
-            return clipboard is not null && !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
-        }
-        catch
-        {
-            return false; // another program is holding the clipboard
-        }
     }
 
     // ─── Dirty tracking ───────────────────────────────────────────────────

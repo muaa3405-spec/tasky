@@ -3,6 +3,8 @@
         xmlns:vm="using:Tasky.ViewModels"
         xmlns:models="using:Tasky.Models"
         xmlns:beh="using:Tasky.Behaviors"
+        xmlns:ctrl="using:Tasky.Controls"
+        xmlns:helpers="using:Tasky.Helpers"
         x:Class="Tasky.MainWindow"
         Title="Tasky" Width="604" Height="681"
         MinWidth="444" MinHeight="421"
@@ -331,8 +333,7 @@
                                      Text="{Binding NewDescription}"
                                      IsEnabled="{Binding HasTitle}"
                                      MinHeight="44" MaxHeight="100" TextWrapping="Wrap"
-                                     AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     DragDrop.AllowDrop="True"/>
+                                     AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
                             <Border IsHitTestVisible="False" CornerRadius="6" BorderThickness="1"
                                     BorderBrush="{DynamicResource BorderColor}"
                                     Background="{DynamicResource InputBackground}" Opacity="0.6"
@@ -343,32 +344,8 @@
                             </Border>
                         </Grid>
 
-                        <!-- Attachment row: button + hint, with thumbnail previews -->
-                        <Grid Grid.Row="4" Margin="0,2,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="&#x1F4CE;  Attach Image"
-                                        Theme="{StaticResource SecondaryButton}"
-                                        Padding="12,6" FontSize="12"
-                                        Click="AttachImage_Click"/>
-                                <TextBlock Grid.Column="1" Margin="10,0,0,0"
-                                           Text="or paste / drop an image"
-                                           FontSize="11" Foreground="{DynamicResource TextSecondary}"
-                                           Opacity="0.6" VerticalAlignment="Center"/>
-                            </Grid>
-                            <!-- Thumbnail previews — shown once attachments are queued -->
-                            <Border x:Name="PendingAttachPanel" Grid.Row="1"
-                                    IsVisible="False" Margin="0,8,0,0">
-                                <WrapPanel x:Name="PendingAttachThumbs"/>
-                            </Border>
-                        </Grid>
+                        <!-- Attachments: saved with the task when it is added -->
+                        <ctrl:PendingAttachmentsPanel x:Name="NewTaskAttachments" Grid.Row="4" Margin="0,2,0,0"/>
 
                         <!-- Start / Group / Repeat -->
                         <Grid Grid.Row="6">
@@ -406,15 +383,28 @@
                                     <ComboBoxItem Content="Weekly"  Tag="2"/>
                                     <ComboBoxItem Content="Monthly" Tag="3"/>
                                 </ComboBox>
+                                <TextBlock Text="&#x24D8;" Theme="{StaticResource InfoIcon}"
+                                           ToolTip.Tip="{x:Static helpers:RecurrenceRules.Explanation}"/>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Add Task button — right-aligned at the bottom -->
-                        <Button Grid.Row="8"
-                                HorizontalAlignment="Right"
-                                Theme="{StaticResource PrimaryButton}"
-                                Command="{Binding AddTaskCommand}"
-                                Content="Add Task" Click="AddTask_Click"/>
+                        <!-- Optional repeat end date (only for repeating tasks) + Add Task button on the right -->
+                        <Grid Grid.Row="8" ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                        IsVisible="{Binding NewTaskRepeats}">
+                                <TextBlock Text="Ends on:" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondary}" Margin="0,0,6,0"/>
+                                <CalendarDatePicker Theme="{StaticResource ThemedDatePicker}"
+                                                    SelectedDate="{Binding NewTaskRecurrenceEndDate, Mode=TwoWay}"
+                                                    SelectedDateFormat="Custom" CustomDateFormatString="yyyy-MM-dd"
+                                                    FirstDayOfWeek="Monday" Watermark="No end date"
+                                                    Width="148" FontSize="13"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Theme="{StaticResource PrimaryButton}"
+                                    Command="{Binding AddTaskCommand}"
+                                    Content="Add Task" Click="AddTask_Click"/>
+                        </Grid>
                     </Grid>
                 </StackPanel>
             </StackPanel>
@@ -512,7 +502,8 @@
                                                     <!-- Recurrence badge -->
                                                     <Border CornerRadius="3" Padding="4,1" Margin="0,2,6,2" VerticalAlignment="Center"
                                                             IsVisible="{Binding RecurrenceDisplay, Converter={StaticResource HasText}}"
-                                                            Background="{Binding RecurrenceBrush}">
+                                                            Background="{Binding RecurrenceBrush}"
+                                                            ToolTip.Tip="{Binding RecurrenceTooltip}">
                                                         <TextBlock Text="{Binding RecurrenceDisplay}"
                                                                    FontSize="10" FontWeight="SemiBold" Foreground="White"/>
                                                     </Border>
@@ -523,16 +514,26 @@
                                                 </WrapPanel>
                                                 <StackPanel IsVisible="{Binding Description, Converter={StaticResource HasText}}"
                                                             Margin="0,2,0,0">
-                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                    <TextBlock x:Name="TaskDescriptionText"
+                                                               Text="{Binding Description}" TextWrapping="Wrap"
                                                                Theme="{StaticResource SubText}"
                                                                Classes="taskDescription"
-                                                               Classes.expanded="{Binding IsDescriptionExpanded}"/>
+                                                               Classes.expanded="{Binding IsDescriptionExpanded}"
+                                                               beh:TextOverflow.Detect="True"/>
+                                                    <!-- Only when the description is cut off, or to collapse it again -->
                                                     <Button Content="{Binding ShowMoreLabel}" HorizontalAlignment="Left"
                                                             Theme="{StaticResource PlainButton}"
                                                             Click="ShowMore_Click" Background="Transparent" BorderThickness="0"
                                                             Padding="0,2,0,0" Cursor="Hand"
                                                             Foreground="{DynamicResource PrimaryBlue}"
-                                                            FontSize="11"/>
+                                                            FontSize="11">
+                                                        <Button.IsVisible>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                                                <Binding Path="IsDescriptionExpanded"/>
+                                                                <Binding ElementName="TaskDescriptionText" Path="(beh:TextOverflow.IsTrimmed)"/>
+                                                            </MultiBinding>
+                                                        </Button.IsVisible>
+                                                    </Button>
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                                                             IsVisible="{Binding IsActive}">
@@ -745,6 +746,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <TextBox Grid.Row="0" x:Name="NoteTitleBox" Theme="{StaticResource InputBox}"
                                  Watermark="Note title..." Text="{Binding NewNoteTitle}"/>
@@ -756,7 +759,9 @@
                                  VerticalContentAlignment="Top"/>
                         <TextBox Grid.Row="4" x:Name="NoteTagsBox" Theme="{StaticResource InputBox}"
                                  Watermark="Search terms / tags (comma-separated)..."/>
-                        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Attachments: saved with the note when it is added -->
+                        <ctrl:PendingAttachmentsPanel x:Name="NewNoteAttachments" Grid.Row="6"/>
+                        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Theme="{StaticResource SecondaryButton}"
                                     Content="Cancel" Margin="0,0,8,0"
                                     Click="CancelNote_Click"/>
@@ -791,9 +796,16 @@
                                             <StackPanel Grid.Column="0">
                                                 <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,3"/>
-                                                <TextBlock Text="{Binding Description}" FontSize="12"
+                                                <TextBlock x:Name="NoteDescriptionText"
+                                                           Text="{Binding Description}" FontSize="12"
                                                            Foreground="{DynamicResource TextSecondary}"
-                                                           TextTrimming="CharacterEllipsis" MaxHeight="36"/>
+                                                           TextTrimming="CharacterEllipsis" MaxHeight="36"
+                                                           beh:TextOverflow.Detect="True"/>
+                                                <!-- "There's more": open the note to read all of it -->
+                                                <TextBlock Text="&#x22EF;" FontSize="16" FontWeight="Bold" LineHeight="14"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           ToolTip.Tip="Open the note to see all of it"
+                                                           IsVisible="{Binding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
                                                 <!-- Tag chips (only rendered when there are tags) -->
                                                 <ItemsControl ItemsSource="{Binding TagList}" Margin="0,5,0,0"
                                                               IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">

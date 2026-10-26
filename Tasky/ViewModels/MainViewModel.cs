@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Tasky.Helpers;
 using Tasky.Models;
 using Tasky.Services;
 
@@ -26,6 +27,7 @@ public class MainViewModel : INotifyPropertyChanged
     private string _taskSearch = string.Empty;
     private int? _newTaskGroupId = null;
     private RecurrenceType _newTaskRecurrence = RecurrenceType.None;
+    private DateTime? _newTaskRecurrenceEndDate;
 
     private int _missedNotifCount;
     public int MissedNotifCount
@@ -86,7 +88,16 @@ public class MainViewModel : INotifyPropertyChanged
     public RecurrenceType NewTaskRecurrence
     {
         get => _newTaskRecurrence;
-        set { _newTaskRecurrence = value; OnPropertyChanged(); }
+        set { _newTaskRecurrence = value; OnPropertyChanged(); OnPropertyChanged(nameof(NewTaskRepeats)); }
+    }
+
+    /// <summary>True when the new task repeats, which shows its optional end date.</summary>
+    public bool NewTaskRepeats => _newTaskRecurrence != RecurrenceType.None;
+
+    public DateTime? NewTaskRecurrenceEndDate
+    {
+        get => _newTaskRecurrenceEndDate;
+        set { _newTaskRecurrenceEndDate = value; OnPropertyChanged(); }
     }
 
     public void LoadGroups()
@@ -506,7 +517,8 @@ public class MainViewModel : INotifyPropertyChanged
             DueDate     = NewDueDate ?? DateTime.Today,
             SortOrder   = Tasks.Count,
             GroupId     = NewTaskGroupId,
-            Recurrence  = NewTaskRecurrence
+            Recurrence  = NewTaskRecurrence,
+            RecurrenceEndDate = NewTaskRecurrence == RecurrenceType.None ? null : NewTaskRecurrenceEndDate
         };
         _db.InsertTask(task);
         var vm = new TaskItemViewModel(task);
@@ -519,6 +531,7 @@ public class MainViewModel : INotifyPropertyChanged
         NewDueDate        = DateTime.Today;
         NewTaskGroupId    = (Groups.FirstOrDefault(g => g.Name.Equals("Other", StringComparison.OrdinalIgnoreCase)) ?? Groups.FirstOrDefault())?.Id;
         NewTaskRecurrence = RecurrenceType.None;
+        NewTaskRecurrenceEndDate = null;
         RefreshVisibleTasks();
     }
 
@@ -558,25 +571,26 @@ public class MainViewModel : INotifyPropertyChanged
         // Handle recurrence
         if (vm.Recurrence != RecurrenceType.None)
         {
-            DateTime nextDue = vm.Recurrence switch
-            {
-                RecurrenceType.Daily   => DateTime.Today.AddDays(1),
-                RecurrenceType.Weekly  => DateTime.Today.AddDays(7),
-                RecurrenceType.Monthly => DateTime.Today.AddMonths(1),
-                _                      => DateTime.Today.AddDays(1)
-            };
+            DateTime nextDue = RecurrenceRules.NextDueDate(vm.Recurrence);
 
             // Un-completing and re-completing must not stack up copies of the next occurrence.
             if (HasOpenOccurrence(vm)) return true;
 
+            if (!RecurrenceRules.ContinuesOn(nextDue, vm.RecurrenceEndDate))
+            {
+                InAppNotificationService.Info($"\"{vm.Title}\" has finished repeating (ended {vm.RecurrenceEndDate:MMM d}).");
+                return true;
+            }
+
             var newTask = new TaskItem
             {
-                Title       = vm.Title,
-                Description = vm.Description,
-                DueDate     = nextDue,
-                GroupId     = vm.GroupId,
-                Recurrence  = vm.Recurrence,
-                SortOrder   = Tasks.Count
+                Title             = vm.Title,
+                Description       = vm.Description,
+                DueDate           = nextDue,
+                GroupId           = vm.GroupId,
+                Recurrence        = vm.Recurrence,
+                RecurrenceEndDate = vm.RecurrenceEndDate,
+                SortOrder         = Tasks.Count
             };
             _db.InsertTask(newTask);
             var newRecurVm = new TaskItemViewModel(newTask);

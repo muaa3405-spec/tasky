@@ -34,9 +34,6 @@ public partial class MainWindow : Window
     private string _meetingFilter = "week";
     private string _appUsageFilter = "today";
 
-    // Pending attachments buffered while the Add Task form is open
-    private readonly List<(byte[] Data, string Ext)> _pendingAttachBytes = new();
-    private readonly List<string>                    _pendingAttachPaths  = new();
     private MainViewModel Vm => (MainViewModel)DataContext!;
 
     private static readonly TimeSpan PageAnimation = TimeSpan.FromMilliseconds(250);
@@ -143,8 +140,8 @@ public partial class MainWindow : Window
         PopulateSoundPicker();
         InitTrayIcon();
 
-        DescInputBox.AddHandler(KeyDownEvent, Desc_PreviewKeyDown, RoutingStrategies.Tunnel);
-        DescInputBox.AddHandler(DragDrop.DropEvent, Desc_Drop);
+        NewTaskAttachments.AcceptAttachmentsAnywhereIn(AddFormPanel);
+        NewNoteAttachments.AcceptAttachmentsAnywhereIn(AddNotePanel);
         WeeklyChartScroll.AddHandler(PointerWheelChangedEvent, InnerScroll_PreviewMouseWheel, RoutingStrategies.Tunnel);
         Closing += Window_Closing;
 
@@ -305,6 +302,21 @@ public partial class MainWindow : Window
             i++;
         }
         NewTaskGroupPicker.SelectedIndex = selectIndex;
+    }
+
+    /// <summary>
+    /// Shows the view model's new-task group and repeat values in their pickers. Without this the pickers
+    /// keep the previous task's choice on screen while the view model has already reset to the defaults,
+    /// so the next task silently gets "Other" / no repeat.
+    /// </summary>
+    private void SyncNewTaskPickersToViewModel()
+    {
+        NewTaskGroupPicker.SelectedItem = NewTaskGroupPicker.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => i.Tag as int? == Vm.NewTaskGroupId);
+
+        string recurrenceTag = ((int)Vm.NewTaskRecurrence).ToString();
+        NewTaskRecurrencePicker.SelectedItem = NewTaskRecurrencePicker.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => i.Tag as string == recurrenceTag);
     }
 
     private void NewTaskGroup_Changed(object? sender, SelectionChangedEventArgs e)
@@ -736,10 +748,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Cancelled — discard pending attachments
-            _pendingAttachBytes.Clear();
-            _pendingAttachPaths.Clear();
-            RebuildPendingAttachThumbs();
+            NewTaskAttachments.Clear();   // cancelled
         }
     }
 
@@ -748,14 +757,17 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(Vm.NewTitle)) return;
 
         Vm.AddTask();   // creates and sorts the task
+        SyncNewTaskPickersToViewModel();   // AddTask resets the group/repeat defaults
 
         // The newest task IS the one just added — find it by CreatedAt (most recent)
         var newTask = Vm.Tasks.OrderByDescending(t => t.Model.CreatedAt).FirstOrDefault();
-        int pendingCount = _pendingAttachBytes.Count + _pendingAttachPaths.Count;
-        if (newTask != null && pendingCount > 0)
+        if (newTask != null && NewTaskAttachments.Count > 0)
         {
-            FlushPendingAttachments(newTask.Id);
-            InAppNotificationService.Success($"Task created with {pendingCount} attachment(s).");
+            int saved = NewTaskAttachments.SaveAll(
+                (png, ext) => Vm.SaveAttachmentFromBytes(newTask.Id, png, ext),
+                path => Vm.SaveAttachment(newTask.Id, path));
+            Vm.RefreshAttachmentCount(newTask);
+            if (saved > 0) InAppNotificationService.Success($"Task created with {saved} attachment(s).");
         }
 
         _addPanelOpen          = false;
@@ -773,159 +785,6 @@ public partial class MainWindow : Window
     private void Filter_All_Click(object? sender, RoutedEventArgs e)      => Vm.ActiveFilter = TaskFilter.All;
     private void Filter_Today_Click(object? sender, RoutedEventArgs e)    => Vm.ActiveFilter = TaskFilter.Today;
     private void Filter_ThisWeek_Click(object? sender, RoutedEventArgs e) => Vm.ActiveFilter = TaskFilter.ThisWeek;
-
-    // Image paste / drop
-
-    private void Desc_PreviewKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (!KeyGestures.IsPaste(e)) return;
-        if (PlatformServices.Clipboard.ContainsImage() && PlatformServices.Clipboard.GetImagePng() is { } png)
-        {
-            e.Handled = true;
-            SaveClipboardImage(png);
-        }
-    }
-
-    private void Desc_Drop(object? sender, DragEventArgs e)
-    {
-        foreach (var f in DroppedFiles.From(e).Where(ImageFiles.IsImage)) SaveImageFile(f);
-    }
-
-    private void SaveClipboardImage(byte[] png)
-    {
-        // If the Add Task panel is open, buffer for the upcoming new task
-        if (_addPanelOpen && AddFormPanel.IsVisible)
-        {
-            _pendingAttachBytes.Add((png, ".png"));
-            RebuildPendingAttachThumbs();
-            return;
-        }
-        // Otherwise attach to active/last task as before
-        var target = ResolveExistingTarget();
-        if (target is null) return;
-        Vm.SaveAttachmentFromBytes(target.Id, png, ".png");
-        Vm.RefreshAttachmentCount(target);
-        ShowAttachmentToast(target.Title);
-    }
-
-    private void SaveImageFile(string path)
-    {
-        if (_addPanelOpen && AddFormPanel.IsVisible)
-        {
-            _pendingAttachPaths.Add(path);
-            RebuildPendingAttachThumbs();
-            return;
-        }
-        var target = ResolveExistingTarget();
-        if (target is null) return;
-        Vm.SaveAttachment(target.Id, path);
-        Vm.RefreshAttachmentCount(target);
-        ShowAttachmentToast(target.Title);
-    }
-
-    private async void AttachImage_Click(object? sender, RoutedEventArgs e)
-    {
-        var files = await FileDialogs.PickFilesAsync(this, "Select image(s) to attach",
-                                                     [FileDialogs.Images, FileDialogs.AllFiles]);
-        if (files.Count == 0) return;
-        _pendingAttachPaths.AddRange(files);
-        RebuildPendingAttachThumbs();
-    }
-
-    private void RebuildPendingAttachThumbs()
-    {
-        int total = _pendingAttachBytes.Count + _pendingAttachPaths.Count;
-        PendingAttachPanel.IsVisible = total > 0;
-        PendingAttachThumbs.Children.Clear();
-
-        // Pasted images (raw bytes)
-        for (int i = 0; i < _pendingAttachBytes.Count; i++)
-        {
-            int idx = i;
-            PendingAttachThumbs.Children.Add(BuildPendingThumb(ImageFiles.FromBytes(_pendingAttachBytes[idx].Data), () =>
-            {
-                if (idx < _pendingAttachBytes.Count) _pendingAttachBytes.RemoveAt(idx);
-                RebuildPendingAttachThumbs();
-            }));
-        }
-
-        // Picked / dropped files (paths)
-        for (int i = 0; i < _pendingAttachPaths.Count; i++)
-        {
-            int idx = i;
-            PendingAttachThumbs.Children.Add(BuildPendingThumb(ImageFiles.Load(_pendingAttachPaths[idx]), () =>
-            {
-                if (idx < _pendingAttachPaths.Count) _pendingAttachPaths.RemoveAt(idx);
-                RebuildPendingAttachThumbs();
-            }));
-        }
-    }
-
-    private Control BuildPendingThumb(Bitmap? src, Action onRemove)
-    {
-        var border = new Border
-        {
-            Width = 72, Height = 72, Margin = new Thickness(0, 0, 8, 8),
-            CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1)
-        }
-        .WithResource(Border.BorderBrushProperty, "BorderColor")
-        .WithResource(Border.BackgroundProperty,  "CardBackground");
-
-        var grid = new Grid();
-        if (src != null)
-            grid.Children.Add(new Image { Source = src, Stretch = Stretch.UniformToFill });
-        else
-            grid.Children.Add(new TextBlock
-            {
-                Text = "📄", FontSize = 26,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment   = VerticalAlignment.Center
-            });
-
-        var del = new Button
-        {
-            Theme   = UiResources.Theme("PlainButton"),
-            Content = "✕", Width = 18, Height = 18, FontSize = 10,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment   = VerticalAlignment.Top,
-            Margin = new Thickness(0, 2, 2, 0), Cursor = new Cursor(StandardCursorType.Hand),
-            BorderThickness = new Thickness(0),
-            Background = new SolidColorBrush(Color.FromArgb(210, 17, 24, 39)),
-            Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68))
-        };
-        ToolTip.SetTip(del, "Remove");
-        del.Click += (_, _) => onRemove();
-
-        grid.Children.Add(del);
-        border.Child = grid;
-        return border;
-    }
-
-    private void FlushPendingAttachments(int taskId)
-    {
-        foreach (var (data, ext) in _pendingAttachBytes)
-            Vm.SaveAttachmentFromBytes(taskId, data, ext);
-        foreach (var path in _pendingAttachPaths)
-            Vm.SaveAttachment(taskId, path);
-        _pendingAttachBytes.Clear();
-        _pendingAttachPaths.Clear();
-        RebuildPendingAttachThumbs();
-        var vm = Vm.Tasks.FirstOrDefault(t => t.Id == taskId);
-        if (vm != null) Vm.RefreshAttachmentCount(vm);
-    }
-
-    private TaskItemViewModel? ResolveExistingTarget()
-    {
-        if (Vm.Tasks.Count == 0)
-        {
-            InAppNotificationService.Warning("No tasks available to attach to.");
-            return null;
-        }
-        return Vm.ActiveTask ?? Vm.Tasks.First();
-    }
-
-    private static void ShowAttachmentToast(string title)
-        => InAppNotificationService.Success("Image attached to \"" + title + "\".");
 
     // Task event handlers
 
@@ -1226,12 +1085,14 @@ public partial class MainWindow : Window
             NoteTagsBox.Text  = string.Empty;
             NoteTitleBox.Focus();
         }
+        NewNoteAttachments.Clear();
     }
 
     private void CancelNote_Click(object? sender, RoutedEventArgs e)
     {
         _addNotePanelOpen = false;
         AddNotePanel.IsVisible = false;
+        NewNoteAttachments.Clear();
     }
 
     private void SaveNote_Click(object? sender, RoutedEventArgs e)
@@ -1242,12 +1103,15 @@ public partial class MainWindow : Window
             InAppNotificationService.Warning("Note title cannot be empty.");
             return;
         }
-        Vm.AddNote(title, NoteDescBox.Text?.Trim() ?? string.Empty, NoteTagsBox.Text?.Trim() ?? string.Empty);
+        var note = Vm.AddNote(title, NoteDescBox.Text?.Trim() ?? string.Empty, NoteTagsBox.Text?.Trim() ?? string.Empty);
+        int attached = NewNoteAttachments.SaveAll(
+            (png, ext) => Vm.SaveNoteAttachmentFromBytes(note.Id, png, ext),
+            path => Vm.SaveNoteAttachment(note.Id, path));
         _addNotePanelOpen = false;
         AddNotePanel.IsVisible = false;
-        Vm.LoadNotes();
+        Vm.LoadNotes();   // also refreshes each note's attachment count
         RefreshNotesEmpty();
-        InAppNotificationService.Success("Note saved.");
+        InAppNotificationService.Success(attached > 0 ? $"Note saved with {attached} attachment(s)." : "Note saved.");
     }
 
     private async void Note_Click(object? sender, PointerReleasedEventArgs e)

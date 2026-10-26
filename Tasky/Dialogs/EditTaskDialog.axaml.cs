@@ -16,7 +16,6 @@ namespace Tasky.Dialogs;
 
 public partial class EditTaskDialog : Window
 {
-    private const int ThumbnailDecodeWidth = 160;
     private static readonly Color FallbackGroupColor = Color.FromRgb(107, 114, 128);
 
     private readonly TaskItemViewModel _vm = null!;
@@ -42,6 +41,7 @@ public partial class EditTaskDialog : Window
 
         PopulateGroupPicker(vm.GroupId);
         SelectRecurrence(vm.Recurrence);
+        RepeatEndPicker.SelectedDate = vm.RecurrenceEndDate;
 
         Opened += (_, _) =>
         {
@@ -49,7 +49,7 @@ public partial class EditTaskDialog : Window
             TitleBox.SelectAll();
         };
 
-        LoadAttachments();
+        SetUpAttachments();
     }
 
     // ─── Pickers ──────────────────────────────────────────────────────────
@@ -112,121 +112,62 @@ public partial class EditTaskDialog : Window
         if (RecurrencePicker.SelectedIndex < 0) RecurrencePicker.SelectedIndex = 0;
     }
 
+    private RecurrenceType SelectedRecurrence
+        => RecurrencePicker.SelectedItem is ComboBoxItem { Tag: string tag } && int.TryParse(tag, out int value)
+            ? (RecurrenceType)value
+            : RecurrenceType.None;
+
+    private void RecurrencePicker_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Fires during InitializeComponent too, before the end-date section exists.
+        if (RepeatEndSection is null) return;
+        RepeatEndSection.IsVisible = SelectedRecurrence != RecurrenceType.None;
+    }
+
     // ─── Attachments ──────────────────────────────────────────────────────
 
-    private void LoadAttachments()
+    private void SetUpAttachments()
     {
         if (_mainVm is null)
         {
             // No view-model context — hide the whole section.
-            AddAttachBtn.IsVisible  = false;
-            NoAttachLabel.IsVisible = false;
+            AttachmentsLabel.IsVisible = false;
+            Attachments.IsVisible      = false;
             return;
         }
 
-        AttachThumbs.Children.Clear();
-        var list = _mainVm.GetAttachments(_vm.Id);
-        NoAttachLabel.IsVisible = list.Count == 0;
-        foreach (var att in list)
-            AttachThumbs.Children.Add(BuildCard(att, list));
+        Attachments.FilesAdded      += AttachFiles;
+        Attachments.ImagePasted     += AttachPastedImage;
+        Attachments.DeleteRequested += RemoveAttachment;
+        Attachments.AcceptAttachmentsAnywhereIn(this);
+        ReloadAttachments();
     }
 
-    private Control BuildCard(TaskAttachment att, List<TaskAttachment> all)
+    private void ReloadAttachments()
     {
-        bool isImg = ImageFiles.IsImage(att.FilePath);
-
-        var border = new Border
-        {
-            Width = 96, Height = 110, Margin = new Thickness(0, 0, 8, 8),
-            CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1),
-            Cursor = new Cursor(StandardCursorType.Hand)
-        };
-        border.WithResource(Border.BorderBrushProperty, "BorderColor");
-        border.WithResource(Border.BackgroundProperty,  "CardBackground");
-
-        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-
-        if (isImg && File.Exists(att.FilePath))
-        {
-            stack.Children.Add(new Image
-            {
-                Width = 80, Height = 64, Stretch = Stretch.UniformToFill,
-                Margin = new Thickness(0, 6, 0, 4),
-                Source = ImageFiles.Load(att.FilePath, ThumbnailDecodeWidth)
-            });
-        }
-        else
-        {
-            stack.Children.Add(new TextBlock
-            {
-                Text = "📄", FontSize = 28,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 12, 0, 4)
-            });
-        }
-
-        stack.Children.Add(new TextBlock
-        {
-            Text = att.FileName, FontSize = 9, TextWrapping = TextWrapping.Wrap,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(4, 0, 4, 4), MaxHeight = 26,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-
-        // Stock WPF button look with a dark translucent fill and red cross
-        var del = new Button
-        {
-            Theme = UiResources.Theme("PlainButton"),
-            Content = "✕", Width = 18, Height = 18, FontSize = 10,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment   = VerticalAlignment.Top,
-            Margin = new Thickness(0, 2, 2, 0), Cursor = new Cursor(StandardCursorType.Hand),
-            BorderThickness = new Thickness(0),
-            Background = new SolidColorBrush(Color.FromArgb(210, 17, 24, 39)),
-            Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68))
-        };
-        ToolTip.SetTip(del, "Remove attachment");
-        del.Click += (_, _) =>
-        {
-            _mainVm!.DeleteAttachment(att);
-            _mainVm.RefreshAttachmentCount(_vm);
-            LoadAttachments();
-        };
-
-        var grid = new Grid();
-        grid.Children.Add(stack);
-        grid.Children.Add(del);
-        border.Child = grid;
-
-        border.PointerReleased += async (_, e) =>
-        {
-            if (e.InitialPressMouseButton != MouseButton.Left) return;
-            if (!File.Exists(att.FilePath)) return;
-            if (isImg)
-            {
-                var images = all.Where(a => ImageFiles.IsImage(a.FilePath)).ToList();
-                int idx = images.FindIndex(a => a.Id == att.Id);
-                await new Windows.ImageViewerWindow(images, idx >= 0 ? idx : 0).ShowDialog(this);
-            }
-            else
-            {
-                FileLauncher.Open(att.FilePath);
-            }
-        };
-
-        return border;
-    }
-
-    private async void AddAttachment_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_mainVm is null) return;
-        var files = await FileDialogs.PickFilesAsync(TopLevel.GetTopLevel(this),
-            "Select image(s) to attach", [FileDialogs.Images, FileDialogs.AllFiles]);
-        if (files.Count == 0) return;
-        foreach (var f in files) _mainVm.SaveAttachment(_vm.Id, f);
+        Attachments.SetAttachments(_mainVm!.GetAttachments(_vm.Id));
         _mainVm.RefreshAttachmentCount(_vm);
-        LoadAttachments();
-        InAppNotificationService.Success($"{files.Count} file(s) attached.");
+    }
+
+    private void AttachFiles(IReadOnlyList<string> paths)
+    {
+        int saved = paths.Count(path => _mainVm!.SaveAttachment(_vm.Id, path));
+        ReloadAttachments();
+        if (saved > 0) InAppNotificationService.Success(saved == 1 ? "File attached." : $"{saved} files attached.");
+    }
+
+    private void AttachPastedImage(byte[] png)
+    {
+        if (_mainVm!.SaveAttachmentFromBytes(_vm.Id, png, ".png"))
+            InAppNotificationService.Success("Image pasted and attached.");
+        ReloadAttachments();
+    }
+
+    private void RemoveAttachment(IAttachment attachment)
+    {
+        if (attachment is not TaskAttachment taskAttachment) return;
+        _mainVm!.DeleteAttachment(taskAttachment);
+        ReloadAttachments();
     }
 
     // ─── Save / cancel ────────────────────────────────────────────────────
@@ -246,10 +187,8 @@ public partial class EditTaskDialog : Window
         if (GroupPicker.SelectedItem is GroupOption group)
             _vm.GroupId = group.Id;
 
-        // Recurrence
-        if (RecurrencePicker.SelectedItem is ComboBoxItem rci
-            && rci.Tag is string s && int.TryParse(s, out int rv))
-            _vm.Recurrence = (RecurrenceType)rv;
+        _vm.Recurrence        = SelectedRecurrence;
+        _vm.RecurrenceEndDate = SelectedRecurrence == RecurrenceType.None ? null : RepeatEndPicker.SelectedDate;
 
         Close(true);
     }

@@ -1,5 +1,6 @@
 <Window x:Class="Tasky.Dialogs.EditTaskDialog"
         xmlns:ctrl="using:Tasky.Controls"
+        xmlns:helpers="using:Tasky.Helpers"
         Classes="toolWindow"
         xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -44,30 +45,31 @@
                   HorizontalContentAlignment="Left"
                   Margin="0,0,0,16"/>
 
-        <TextBlock Text="RECURRENCE" Theme="{StaticResource LabelText}"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="REPEAT" Theme="{StaticResource LabelText}" Margin="0"/>
+            <TextBlock Text="&#x24D8;" Theme="{StaticResource InfoIcon}" FontSize="12"
+                       ToolTip.Tip="{x:Static helpers:RecurrenceRules.Explanation}"/>
+        </StackPanel>
         <ComboBox x:Name="RecurrencePicker" Theme="{StaticResource ThemedComboBox}"
-                  Margin="0,0,0,24" SelectedIndex="0">
+                  Margin="0,0,0,16" SelectedIndex="0"
+                  SelectionChanged="RecurrencePicker_Changed">
             <ComboBoxItem Content="None"    Tag="0"/>
             <ComboBoxItem Content="Daily"   Tag="1"/>
             <ComboBoxItem Content="Weekly"  Tag="2"/>
             <ComboBoxItem Content="Monthly" Tag="3"/>
         </ComboBox>
 
-        <TextBlock Text="ATTACHMENTS" Theme="{StaticResource LabelText}"/>
-        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
-                CornerRadius="6" Padding="10" Margin="0,0,0,24">
-            <StackPanel>
-                <TextBlock x:Name="NoAttachLabel" Text="No attachments yet."
-                           Foreground="{DynamicResource TextSecondary}"
-                           FontSize="12" Opacity="0.7"/>
-                <WrapPanel x:Name="AttachThumbs"/>
-                <Button x:Name="AddAttachBtn" Content="&#x1F4CE;  Add Image"
-                        Theme="{StaticResource SecondaryButton}"
-                        HorizontalAlignment="Left" Margin="0,10,0,0"
-                        Padding="12,6" FontSize="12"
-                        Click="AddAttachment_Click"/>
-            </StackPanel>
-        </Border>
+        <!-- Optional: only for repeating tasks -->
+        <StackPanel x:Name="RepeatEndSection" IsVisible="False" Margin="0,0,0,16">
+            <TextBlock Text="REPEAT ENDS ON (OPTIONAL)" Theme="{StaticResource LabelText}"/>
+            <CalendarDatePicker x:Name="RepeatEndPicker" Theme="{StaticResource ThemedDatePicker}"
+                                Watermark="No end date"/>
+        </StackPanel>
+        <Border Height="8"/>
+
+        <!-- Attachments — saved immediately, independent of "Save Changes" -->
+        <TextBlock x:Name="AttachmentsLabel" Text="ATTACHMENTS" Theme="{StaticResource LabelText}"/>
+        <ctrl:AttachmentsPanel x:Name="Attachments" Margin="0,0,0,24"/>
     </StackPanel>
     </ScrollViewer>
 

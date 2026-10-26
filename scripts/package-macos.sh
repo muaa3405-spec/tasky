@@ -64,7 +64,13 @@ codesign --force --deep --sign - "$APP"
 echo "▸ Building Tasky.dmg"
 DMG="$DIST/Tasky-$VERSION-$ARCH.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Tasky" -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+# hdiutil sometimes fails with "Resource busy" while macOS still indexes the new app; retry a few times.
+for attempt in 1 2 3 4 5; do
+  if hdiutil create -volname "Tasky" -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null; then break; fi
+  if [ "$attempt" -eq 5 ]; then echo "hdiutil failed 5 times" >&2; exit 1; fi
+  echo "  hdiutil failed (attempt $attempt), retrying in 5 s"
+  sleep 5
+done
 
 echo "✔ Done: $APP"
 echo "✔ Done: $DMG"
