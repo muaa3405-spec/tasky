@@ -324,6 +324,17 @@
         <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
     </ControlTheme>
 
+    <!-- ⓘ next to a field: hover (or keep the pointer on it) to read what the field means -->
+    <ControlTheme x:Key="InfoIcon" TargetType="TextBlock">
+        <Setter Property="FontSize"          Value="14"/>
+        <Setter Property="Foreground"        Value="{DynamicResource TextSecondary}"/>
+        <Setter Property="Background"        Value="Transparent"/>
+        <Setter Property="Margin"            Value="6,0,0,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Cursor"            Value="Help"/>
+        <Setter Property="ToolTip.ShowDelay" Value="0"/>
+    </ControlTheme>
+
     <ControlTheme x:Key="LabelText" TargetType="TextBlock">
         <Setter Property="FontSize"   Value="11"/>
         <Setter Property="FontWeight" Value="SemiBold"/>

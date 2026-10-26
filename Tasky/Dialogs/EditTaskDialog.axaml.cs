@@ -41,6 +41,7 @@ public partial class EditTaskDialog : Window
 
         PopulateGroupPicker(vm.GroupId);
         SelectRecurrence(vm.Recurrence);
+        RepeatEndPicker.SelectedDate = vm.RecurrenceEndDate;
 
         Opened += (_, _) =>
         {
@@ -111,6 +112,18 @@ public partial class EditTaskDialog : Window
         if (RecurrencePicker.SelectedIndex < 0) RecurrencePicker.SelectedIndex = 0;
     }
 
+    private RecurrenceType SelectedRecurrence
+        => RecurrencePicker.SelectedItem is ComboBoxItem { Tag: string tag } && int.TryParse(tag, out int value)
+            ? (RecurrenceType)value
+            : RecurrenceType.None;
+
+    private void RecurrencePicker_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        // Fires during InitializeComponent too, before the end-date section exists.
+        if (RepeatEndSection is null) return;
+        RepeatEndSection.IsVisible = SelectedRecurrence != RecurrenceType.None;
+    }
+
     // ─── Attachments ──────────────────────────────────────────────────────
 
     private void SetUpAttachments()
@@ -174,10 +187,8 @@ public partial class EditTaskDialog : Window
         if (GroupPicker.SelectedItem is GroupOption group)
             _vm.GroupId = group.Id;
 
-        // Recurrence
-        if (RecurrencePicker.SelectedItem is ComboBoxItem rci
-            && rci.Tag is string s && int.TryParse(s, out int rv))
-            _vm.Recurrence = (RecurrenceType)rv;
+        _vm.Recurrence        = SelectedRecurrence;
+        _vm.RecurrenceEndDate = SelectedRecurrence == RecurrenceType.None ? null : RepeatEndPicker.SelectedDate;
 
         Close(true);
     }

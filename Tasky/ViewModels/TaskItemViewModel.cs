@@ -51,8 +51,19 @@ public class TaskItemViewModel : INotifyPropertyChanged
     public RecurrenceType Recurrence
     {
         get => _model.Recurrence;
-        set { _model.Recurrence = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecurrenceDisplay)); OnPropertyChanged(nameof(RecurrenceBrush)); }
+        set { _model.Recurrence = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecurrenceDisplay)); OnPropertyChanged(nameof(RecurrenceBrush)); OnPropertyChanged(nameof(RecurrenceTooltip)); }
     }
+
+    public DateTime? RecurrenceEndDate
+    {
+        get => _model.RecurrenceEndDate;
+        set { _model.RecurrenceEndDate = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecurrenceTooltip)); }
+    }
+
+    /// <summary>Hover text of the repeat badge, e.g. "Repeats weekly until Nov 30, 2026".</summary>
+    public string RecurrenceTooltip => _model.RecurrenceEndDate is { } end
+        ? $"Repeats {RecurrenceDisplay.ToLowerInvariant()} until {end:MMM d, yyyy}"
+        : $"Repeats {RecurrenceDisplay.ToLowerInvariant()}, no end date";
 
     /// <summary>Label shown on the task card for recurring tasks. Empty for non-recurring.</summary>
     public string RecurrenceDisplay => _model.Recurrence switch

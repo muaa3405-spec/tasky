@@ -79,6 +79,7 @@ public class DatabaseService
         MigrateColumn(conn, "Tasks", "CompletedAt",         "TEXT");
         MigrateColumn(conn, "Tasks", "GroupId",             "INTEGER");
         MigrateColumn(conn, "Tasks",    "Recurrence",       "INTEGER NOT NULL DEFAULT 0");
+        MigrateColumn(conn, "Tasks",    "RecurrenceEndDate","TEXT");
         MigrateColumn(conn, "Tasks",    "DeletedAt",        "TEXT");
         MigrateColumn(conn, "Reminders","TargetDayOfWeek","INTEGER");
         MigrateColumn(conn, "Reminders","DayOfMonth",     "INTEGER");
@@ -440,9 +441,9 @@ public class DatabaseService
         cmd.CommandText = @"
             INSERT INTO Tasks (TaskNumber,Title,Description,IsCompleted,IsActive,IsPaused,
                                SortOrder,CreatedAt,ActiveStartTime,AccumulatedSeconds,ManualTimeMinutes,
-                               DueDate,CompletedAt,GroupId,Recurrence)
+                               DueDate,CompletedAt,GroupId,Recurrence,RecurrenceEndDate)
             VALUES ($num,$title,$desc,$comp,$active,$paused,
-                    $sort,$created,$ast,$acc,$manual,$due,$cat,$grp,$rec);
+                    $sort,$created,$ast,$acc,$manual,$due,$cat,$grp,$rec,$recEnd);
             SELECT last_insert_rowid();";
         cmd.Parameters.AddWithValue("$num",     task.TaskNumber);
         cmd.Parameters.AddWithValue("$title",   task.Title);
@@ -464,6 +465,7 @@ public class DatabaseService
         cmd.Parameters.AddWithValue("$grp",     task.GroupId.HasValue
             ? (object)task.GroupId.Value : DBNull.Value);
         cmd.Parameters.AddWithValue("$rec",     (int)task.Recurrence);
+        AddRecurrenceEndDate(cmd, task);
         task.Id = Convert.ToInt32(cmd.ExecuteScalar());
         return task;
     }
@@ -486,7 +488,8 @@ public class DatabaseService
                 DueDate           = $due,
                 CompletedAt       = $cat,
                 GroupId           = $grp,
-                Recurrence        = $rec
+                Recurrence        = $rec,
+                RecurrenceEndDate = $recEnd
             WHERE Id = $id";
         cmd.Parameters.AddWithValue("$title",   task.Title);
         cmd.Parameters.AddWithValue("$desc",    task.Description);
@@ -506,9 +509,14 @@ public class DatabaseService
         cmd.Parameters.AddWithValue("$grp",     task.GroupId.HasValue
             ? (object)task.GroupId.Value : DBNull.Value);
         cmd.Parameters.AddWithValue("$rec",     (int)task.Recurrence);
+        AddRecurrenceEndDate(cmd, task);
         cmd.Parameters.AddWithValue("$id",      task.Id);
         cmd.ExecuteNonQuery();
     }
+
+    private static void AddRecurrenceEndDate(SqliteCommand cmd, TaskItem task)
+        => cmd.Parameters.AddWithValue("$recEnd", task.RecurrenceEndDate.HasValue
+            ? (object)task.RecurrenceEndDate.Value.ToString("yyyy-MM-dd") : DBNull.Value);
 
     public void DeleteTask(int id) => DeleteTasksWithChildren(new[] { id });
 
@@ -961,6 +969,7 @@ public class DatabaseService
         try { var o = r.GetOrdinal("CompletedAt"); item.CompletedAt = r.IsDBNull(o) ? null : DateTime.Parse(r.GetString(o)); } catch { }
         try { var o = r.GetOrdinal("GroupId");     item.GroupId     = r.IsDBNull(o) ? null : r.GetInt32(o); } catch { }
         try { var o = r.GetOrdinal("Recurrence");  item.Recurrence  = (Models.RecurrenceType)GetIntCol(r, "Recurrence"); } catch { }
+        try { var o = r.GetOrdinal("RecurrenceEndDate"); item.RecurrenceEndDate = r.IsDBNull(o) ? null : DateTime.Parse(r.GetString(o)); } catch { }
         try { var o = r.GetOrdinal("DeletedAt");    item.DeletedAt   = r.IsDBNull(o) ? null : DateTime.Parse(r.GetString(o)); } catch { }
         return item;
     }

@@ -4,6 +4,7 @@
         xmlns:models="using:Tasky.Models"
         xmlns:beh="using:Tasky.Behaviors"
         xmlns:ctrl="using:Tasky.Controls"
+        xmlns:helpers="using:Tasky.Helpers"
         x:Class="Tasky.MainWindow"
         Title="Tasky" Width="604" Height="681"
         MinWidth="444" MinHeight="421"
@@ -382,15 +383,28 @@
                                     <ComboBoxItem Content="Weekly"  Tag="2"/>
                                     <ComboBoxItem Content="Monthly" Tag="3"/>
                                 </ComboBox>
+                                <TextBlock Text="&#x24D8;" Theme="{StaticResource InfoIcon}"
+                                           ToolTip.Tip="{x:Static helpers:RecurrenceRules.Explanation}"/>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Add Task button — right-aligned at the bottom -->
-                        <Button Grid.Row="8"
-                                HorizontalAlignment="Right"
-                                Theme="{StaticResource PrimaryButton}"
-                                Command="{Binding AddTaskCommand}"
-                                Content="Add Task" Click="AddTask_Click"/>
+                        <!-- Optional repeat end date (only for repeating tasks) + Add Task button on the right -->
+                        <Grid Grid.Row="8" ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                        IsVisible="{Binding NewTaskRepeats}">
+                                <TextBlock Text="Ends on:" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondary}" Margin="0,0,6,0"/>
+                                <CalendarDatePicker Theme="{StaticResource ThemedDatePicker}"
+                                                    SelectedDate="{Binding NewTaskRecurrenceEndDate, Mode=TwoWay}"
+                                                    SelectedDateFormat="Custom" CustomDateFormatString="yyyy-MM-dd"
+                                                    FirstDayOfWeek="Monday" Watermark="No end date"
+                                                    Width="148" FontSize="13"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Theme="{StaticResource PrimaryButton}"
+                                    Command="{Binding AddTaskCommand}"
+                                    Content="Add Task" Click="AddTask_Click"/>
+                        </Grid>
                     </Grid>
                 </StackPanel>
             </StackPanel>
@@ -488,7 +502,8 @@
                                                     <!-- Recurrence badge -->
                                                     <Border CornerRadius="3" Padding="4,1" Margin="0,2,6,2" VerticalAlignment="Center"
                                                             IsVisible="{Binding RecurrenceDisplay, Converter={StaticResource HasText}}"
-                                                            Background="{Binding RecurrenceBrush}">
+                                                            Background="{Binding RecurrenceBrush}"
+                                                            ToolTip.Tip="{Binding RecurrenceTooltip}">
                                                         <TextBlock Text="{Binding RecurrenceDisplay}"
                                                                    FontSize="10" FontWeight="SemiBold" Foreground="White"/>
                                                     </Border>

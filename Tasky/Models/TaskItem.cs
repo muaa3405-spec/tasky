@@ -28,6 +28,8 @@ public class TaskItem
     public int? GroupId { get; set; }
     /// <summary>How often this task recurs. On completion a new instance is created automatically.</summary>
     public RecurrenceType Recurrence { get; set; } = RecurrenceType.None;
+    /// <summary>Optional last day a repeat may fall on. Null = repeats forever.</summary>
+    public DateTime? RecurrenceEndDate { get; set; }
     /// <summary>When the task was moved to the recycle bin. Null = not deleted (live task).</summary>
     public DateTime? DeletedAt { get; set; }
 }
