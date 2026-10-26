@@ -514,16 +514,26 @@
                                                 </WrapPanel>
                                                 <StackPanel IsVisible="{Binding Description, Converter={StaticResource HasText}}"
                                                             Margin="0,2,0,0">
-                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                    <TextBlock x:Name="TaskDescriptionText"
+                                                               Text="{Binding Description}" TextWrapping="Wrap"
                                                                Theme="{StaticResource SubText}"
                                                                Classes="taskDescription"
-                                                               Classes.expanded="{Binding IsDescriptionExpanded}"/>
+                                                               Classes.expanded="{Binding IsDescriptionExpanded}"
+                                                               beh:TextOverflow.Detect="True"/>
+                                                    <!-- Only when the description is cut off, or to collapse it again -->
                                                     <Button Content="{Binding ShowMoreLabel}" HorizontalAlignment="Left"
                                                             Theme="{StaticResource PlainButton}"
                                                             Click="ShowMore_Click" Background="Transparent" BorderThickness="0"
                                                             Padding="0,2,0,0" Cursor="Hand"
                                                             Foreground="{DynamicResource PrimaryBlue}"
-                                                            FontSize="11"/>
+                                                            FontSize="11">
+                                                        <Button.IsVisible>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                                                <Binding Path="IsDescriptionExpanded"/>
+                                                                <Binding ElementName="TaskDescriptionText" Path="(beh:TextOverflow.IsTrimmed)"/>
+                                                            </MultiBinding>
+                                                        </Button.IsVisible>
+                                                    </Button>
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                                                             IsVisible="{Binding IsActive}">
@@ -786,9 +796,16 @@
                                             <StackPanel Grid.Column="0">
                                                 <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,3"/>
-                                                <TextBlock Text="{Binding Description}" FontSize="12"
+                                                <TextBlock x:Name="NoteDescriptionText"
+                                                           Text="{Binding Description}" FontSize="12"
                                                            Foreground="{DynamicResource TextSecondary}"
-                                                           TextTrimming="CharacterEllipsis" MaxHeight="36"/>
+                                                           TextTrimming="CharacterEllipsis" MaxHeight="36"
+                                                           beh:TextOverflow.Detect="True"/>
+                                                <!-- "There's more": open the note to read all of it -->
+                                                <TextBlock Text="&#x22EF;" FontSize="16" FontWeight="Bold" LineHeight="14"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           ToolTip.Tip="Open the note to see all of it"
+                                                           IsVisible="{Binding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
                                                 <!-- Tag chips (only rendered when there are tags) -->
                                                 <ItemsControl ItemsSource="{Binding TagList}" Margin="0,5,0,0"
                                                               IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">

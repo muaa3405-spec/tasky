@@ -73,6 +73,7 @@ jobs:
         if: matrix.arch == 'arm64'
         run: |
           export TASKY_DATA_ROOT="$RUNNER_TEMP/tasky-smoke"
+          export TASKY_SMOKE_REMINDER=1   # shows a sample reminder, which should sit at the bottom right
           dist/Tasky.app/Contents/MacOS/Tasky &
           PID=$!
           sleep 25

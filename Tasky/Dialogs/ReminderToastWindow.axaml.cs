@@ -45,16 +45,15 @@ public partial class ReminderToastWindow : Window
         InitializeComponent();
         TitleText.Text = displayTitle;
 
-        // Position at bottom-right (above taskbar / Dock) — do final Y after layout
-        var wa = ScreenHelper.WorkArea(this);
-        ScreenHelper.MoveTo(this, new Point(wa.Right - Width - ScreenMargin, wa.Bottom - 300));
+        // Bottom-right, above the taskbar / Dock. The height is only final once SizeToContent has
+        // measured the content, which can be after Opened, so place it again whenever the size changes.
+        PlaceAtBottomRight();
+        SizeChanged += (_, _) => PlaceAtBottomRight();
         Opacity = 0;
 
         Opened += (_, _) =>
         {
-            var area = ScreenHelper.WorkArea(this);
-            ScreenHelper.MoveTo(this, new Point(area.Right - Width - ScreenMargin,
-                                                area.Bottom - Bounds.Height - ScreenMargin));
+            PlaceAtBottomRight();
 
             // Apply accent color from settings to the top strip + header text
             if (Color.TryParse(App.Settings.Current.NotifAccentColor, out var accent))
@@ -74,6 +73,14 @@ public partial class ReminderToastWindow : Window
         if (secs > 0) _autoDismiss.Start();
 
         PlatformServices.Sounds.Play(App.Settings.Current.NotifTune);
+    }
+
+    private void PlaceAtBottomRight()
+    {
+        var area = ScreenHelper.WorkArea(this);
+        double height = Bounds.Height > 0 ? Bounds.Height : DesiredSize.Height;
+        ScreenHelper.MoveTo(this, new Point(area.Right - Width - ScreenMargin,
+                                            area.Bottom - height - ScreenMargin));
     }
 
     private void Snooze_Click(object? sender, RoutedEventArgs e)

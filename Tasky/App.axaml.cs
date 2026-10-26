@@ -114,6 +114,7 @@ public partial class App : Application
 
             Hotkey = PlatformServices.CreateQuickAddHotkey();
             Hotkey.Register(ShowQuickAdd);
+            SmokeTest.ShowReminderIfRequested();
         }
         mainWindow.Opened += OnFirstOpened;
         mainWindow.Show();
