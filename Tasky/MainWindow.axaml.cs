@@ -307,6 +307,21 @@ public partial class MainWindow : Window
         NewTaskGroupPicker.SelectedIndex = selectIndex;
     }
 
+    /// <summary>
+    /// Shows the view model's new-task group and repeat values in their pickers. Without this the pickers
+    /// keep the previous task's choice on screen while the view model has already reset to the defaults,
+    /// so the next task silently gets "Other" / no repeat.
+    /// </summary>
+    private void SyncNewTaskPickersToViewModel()
+    {
+        NewTaskGroupPicker.SelectedItem = NewTaskGroupPicker.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => i.Tag as int? == Vm.NewTaskGroupId);
+
+        string recurrenceTag = ((int)Vm.NewTaskRecurrence).ToString();
+        NewTaskRecurrencePicker.SelectedItem = NewTaskRecurrencePicker.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => i.Tag as string == recurrenceTag);
+    }
+
     private void NewTaskGroup_Changed(object? sender, SelectionChangedEventArgs e)
     {
         if (DataContext is not MainViewModel) return;
@@ -748,6 +763,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(Vm.NewTitle)) return;
 
         Vm.AddTask();   // creates and sorts the task
+        SyncNewTaskPickersToViewModel();   // AddTask resets the group/repeat defaults
 
         // The newest task IS the one just added — find it by CreatedAt (most recent)
         var newTask = Vm.Tasks.OrderByDescending(t => t.Model.CreatedAt).FirstOrDefault();
