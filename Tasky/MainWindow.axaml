@@ -3,6 +3,7 @@
         xmlns:vm="using:Tasky.ViewModels"
         xmlns:models="using:Tasky.Models"
         xmlns:beh="using:Tasky.Behaviors"
+        xmlns:ctrl="using:Tasky.Controls"
         x:Class="Tasky.MainWindow"
         Title="Tasky" Width="604" Height="681"
         MinWidth="444" MinHeight="421"
@@ -331,8 +332,7 @@
                                      Text="{Binding NewDescription}"
                                      IsEnabled="{Binding HasTitle}"
                                      MinHeight="44" MaxHeight="100" TextWrapping="Wrap"
-                                     AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     DragDrop.AllowDrop="True"/>
+                                     AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
                             <Border IsHitTestVisible="False" CornerRadius="6" BorderThickness="1"
                                     BorderBrush="{DynamicResource BorderColor}"
                                     Background="{DynamicResource InputBackground}" Opacity="0.6"
@@ -343,32 +343,8 @@
                             </Border>
                         </Grid>
 
-                        <!-- Attachment row: button + hint, with thumbnail previews -->
-                        <Grid Grid.Row="4" Margin="0,2,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="&#x1F4CE;  Attach Image"
-                                        Theme="{StaticResource SecondaryButton}"
-                                        Padding="12,6" FontSize="12"
-                                        Click="AttachImage_Click"/>
-                                <TextBlock Grid.Column="1" Margin="10,0,0,0"
-                                           Text="or paste / drop an image"
-                                           FontSize="11" Foreground="{DynamicResource TextSecondary}"
-                                           Opacity="0.6" VerticalAlignment="Center"/>
-                            </Grid>
-                            <!-- Thumbnail previews — shown once attachments are queued -->
-                            <Border x:Name="PendingAttachPanel" Grid.Row="1"
-                                    IsVisible="False" Margin="0,8,0,0">
-                                <WrapPanel x:Name="PendingAttachThumbs"/>
-                            </Border>
-                        </Grid>
+                        <!-- Attachments: saved with the task when it is added -->
+                        <ctrl:PendingAttachmentsPanel x:Name="NewTaskAttachments" Grid.Row="4" Margin="0,2,0,0"/>
 
                         <!-- Start / Group / Repeat -->
                         <Grid Grid.Row="6">
@@ -745,6 +721,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <TextBox Grid.Row="0" x:Name="NoteTitleBox" Theme="{StaticResource InputBox}"
                                  Watermark="Note title..." Text="{Binding NewNoteTitle}"/>
@@ -756,7 +734,9 @@
                                  VerticalContentAlignment="Top"/>
                         <TextBox Grid.Row="4" x:Name="NoteTagsBox" Theme="{StaticResource InputBox}"
                                  Watermark="Search terms / tags (comma-separated)..."/>
-                        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Attachments: saved with the note when it is added -->
+                        <ctrl:PendingAttachmentsPanel x:Name="NewNoteAttachments" Grid.Row="6"/>
+                        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Theme="{StaticResource SecondaryButton}"
                                     Content="Cancel" Margin="0,0,8,0"
                                     Click="CancelNote_Click"/>

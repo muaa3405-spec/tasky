@@ -44,6 +44,18 @@ public partial class AttachmentsPanel : UserControl
         AddHandler(DragDrop.DropEvent, Panel_Drop);
     }
 
+    /// <summary>
+    /// Lets the whole <paramref name="window"/> take attachments: files dropped anywhere on it, and
+    /// Ctrl+V / ⌘V for a copied image or files. While typing in a text box, copied text still pastes as text.
+    /// </summary>
+    public void AcceptAttachmentsAnywhereIn(Window window)
+    {
+        DragDrop.SetAllowDrop(window, true);
+        window.AddHandler(DragDrop.DragOverEvent, Panel_DragOver);
+        window.AddHandler(DragDrop.DropEvent, Panel_Drop);
+        ClipboardAttachments.HandlePasteIn(window, TryPaste);
+    }
+
     public void SetAttachments(IReadOnlyList<IAttachment> items)
     {
         _items = items;
@@ -57,20 +69,7 @@ public partial class AttachmentsPanel : UserControl
     /// clipboard holds neither, so the host can let a normal text paste go ahead.
     /// </summary>
     public bool TryPaste()
-    {
-        var clipboard = PlatformServices.Clipboard;
-        if (clipboard.ContainsImage() && clipboard.GetImagePng() is { } png)
-        {
-            ImagePasted?.Invoke(png);
-            return true;
-        }
-        if (clipboard.GetFiles() is { Count: > 0 } files)
-        {
-            FilesAdded?.Invoke(files);
-            return true;
-        }
-        return false;
-    }
+        => ClipboardAttachments.TryTake(png => ImagePasted?.Invoke(png), files => FilesAdded?.Invoke(files));
 
     // ── Adding ────────────────────────────────────────────────────────────
 
@@ -89,10 +88,11 @@ public partial class AttachmentsPanel : UserControl
 
     private void Panel_Drop(object? sender, DragEventArgs e)
     {
-        var files = DroppedFiles.From(e).ToList();
-        if (files is { Count: > 0 })
-            FilesAdded?.Invoke(files.Where(File.Exists).ToList());
+        e.Handled = true;   // a drop on the panel must not reach the window's handler as well
+        var files = DroppedFiles.From(e).Where(File.Exists).ToList();
+        if (files.Count > 0) FilesAdded?.Invoke(files);
     }
+
 
     // ── Thumbnails ────────────────────────────────────────────────────────
 

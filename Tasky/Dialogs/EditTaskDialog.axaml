@@ -53,21 +53,9 @@
             <ComboBoxItem Content="Monthly" Tag="3"/>
         </ComboBox>
 
-        <TextBlock Text="ATTACHMENTS" Theme="{StaticResource LabelText}"/>
-        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
-                CornerRadius="6" Padding="10" Margin="0,0,0,24">
-            <StackPanel>
-                <TextBlock x:Name="NoAttachLabel" Text="No attachments yet."
-                           Foreground="{DynamicResource TextSecondary}"
-                           FontSize="12" Opacity="0.7"/>
-                <WrapPanel x:Name="AttachThumbs"/>
-                <Button x:Name="AddAttachBtn" Content="&#x1F4CE;  Add Image"
-                        Theme="{StaticResource SecondaryButton}"
-                        HorizontalAlignment="Left" Margin="0,10,0,0"
-                        Padding="12,6" FontSize="12"
-                        Click="AddAttachment_Click"/>
-            </StackPanel>
-        </Border>
+        <!-- Attachments — saved immediately, independent of "Save Changes" -->
+        <TextBlock x:Name="AttachmentsLabel" Text="ATTACHMENTS" Theme="{StaticResource LabelText}"/>
+        <ctrl:AttachmentsPanel x:Name="Attachments" Margin="0,0,0,24"/>
     </StackPanel>
     </ScrollViewer>
 
