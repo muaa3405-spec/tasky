@@ -14,6 +14,8 @@
 
 Install it over your current Tasky: your tasks, notes and attachments are kept.
 
+[Code signing policy](https://github.com/muaa3405-spec/tasky#code-signing-policy) · [Privacy policy](https://github.com/muaa3405-spec/tasky#privacy-policy)
+
 ### What's new
 - **Undo.** Completing, deleting or postponing a task shows a message with an **Undo** button. **Ctrl+Z** (macOS: **⌘Z**) works too.
 - **Postpone.** The new **⏭** button on a task moves it to **tomorrow** or **next week**.

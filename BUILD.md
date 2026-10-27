@@ -128,22 +128,43 @@ APPLE_ID="you@example.com" APPLE_TEAM_ID="<TEAMID>" APPLE_APP_PASSWORD="<app-spe
 ## Code signing in CI
 
 Unsigned installers work, but Windows SmartScreen and macOS Gatekeeper warn people before
-they open them. The **Build installers** workflow signs everything by itself as soon as
-these repository secrets exist (GitHub → Settings → Secrets and variables → Actions).
-Without them it keeps building unsigned installers, as today.
+they open them. The **Build installers** workflow signs by itself once the settings below
+exist (GitHub → Settings → Secrets and variables → Actions). Without them it keeps building
+unsigned installers.
+
+### Windows: SignPath Foundation (free for open source)
+
+Tasky's Windows installer is signed for free by [SignPath Foundation](https://signpath.org)
+(see the README's *Code signing policy*). Only `v*` tag builds are signed; the job waits up
+to 2 hours for you to approve the signing request in SignPath, then attaches the signed
+installer to the release.
+
+1. Apply at signpath.org/apply. After approval, SignPath creates an organization for you.
+2. In SignPath, create the project `tasky` with a signing policy `release-signing` (or tell
+   CI other names with the variables below), and paste
+   [installer/signpath-artifact-configuration.xml](installer/signpath-artifact-configuration.xml)
+   as its artifact configuration. Link the project to this GitHub repository.
+3. Create an API token for a user who may submit signing requests, then add to GitHub:
+
+| Name | Kind | Value |
+|------|------|-------|
+| `SIGNPATH_API_TOKEN` | Secret | The SignPath API token |
+| `SIGNPATH_ORGANIZATION_ID` | Variable | Your SignPath organization ID |
+| `SIGNPATH_PROJECT_SLUG` | Variable (optional) | Defaults to `tasky` |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | Variable (optional) | Defaults to `release-signing` |
+
+SignPath requires multi-factor sign-in on both GitHub and SignPath for everyone on the team.
+
+### macOS: Apple Developer ID (paid)
+
+Apple has no free signing for distribution. With an Apple Developer Program membership:
 
 | Secret | What to put in it |
 |--------|-------------------|
-| `WINDOWS_CERTIFICATE` | Your code-signing certificate (`.pfx`), base64: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))` |
-| `WINDOWS_CERTIFICATE_PASSWORD` | The `.pfx` password |
 | `MACOS_CERTIFICATE` | Your "Developer ID Application" certificate exported from Keychain as `.p12`, base64: `base64 -i cert.p12` |
 | `MACOS_CERTIFICATE_PASSWORD` | The `.p12` password |
 | `MACOS_SIGN_IDENTITY` | e.g. `Developer ID Application: Muhammad Aadil (ABCDE12345)` |
 | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | For notarization: your Apple ID, team ID, and an app-specific password from appleid.apple.com |
-
-Where to get the certificates: a Windows **code-signing certificate** from a certificate
-authority (for example Certum, Sectigo or DigiCert; an OV certificate is enough), and an
-Apple **Developer ID** from the Apple Developer Program.
 
 ---
 

@@ -7,9 +7,10 @@
 # Pushing a v* tag also publishes a GitHub Release with all three installers, using
 # installer/RELEASE_NOTES.md as its description.
 #
-# Code signing switches on by itself once these repository secrets exist (see BUILD.md):
-#   Windows: WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
-#   macOS:   MACOS_CERTIFICATE (base64 .p12), MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY,
+# Code signing switches on by itself once these exist (see BUILD.md):
+#   Windows: secret SIGNPATH_API_TOKEN and variable SIGNPATH_ORGANIZATION_ID (free SignPath
+#            Foundation signing for open source; releases only, each approved in SignPath)
+#   macOS:   secrets MACOS_CERTIFICATE (base64 .p12), MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY,
 #            and for notarization APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 name: Build installers
 
@@ -22,14 +23,15 @@ on:
 
 permissions:
   contents: read
+  actions: read   # lets SignPath download the unsigned installer artifact
 
 jobs:
   windows:
     name: Windows installer
     runs-on: windows-2022
     env:
-      # Secrets cannot be tested in a step condition directly.
-      HAS_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+      # Secrets cannot be tested in a step condition directly. Only v* tags (releases) are signed.
+      SIGN_WITH_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,29 +53,6 @@ jobs:
         shell: pwsh
         run: ./scripts/smoke-test.ps1 -Exe Tasky/bin/Release/net10.0/win-x64/publish/Tasky.exe
 
-      - name: Prepare code signing
-        id: signing
-        if: env.HAS_WINDOWS_CERTIFICATE == 'true'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-        run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'tasky-signing.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
-          "pfx=$pfx" >> $env:GITHUB_OUTPUT
-          "signtool=$($signtool.FullName)" >> $env:GITHUB_OUTPUT
-
-      - name: Sign Tasky.exe
-        if: steps.signing.outputs.pfx != ''
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          & "${{ steps.signing.outputs.signtool }}" sign /f "${{ steps.signing.outputs.pfx }}" /p $env:WINDOWS_CERTIFICATE_PASSWORD `
-            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 Tasky/bin/Release/net10.0/win-x64/publish/Tasky.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Build installer
         shell: pwsh
         run: |
@@ -82,15 +61,38 @@ jobs:
           & $iscc "/DAppVersion=${{ steps.version.outputs.value }}" installer\setup.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Sign installer
-        if: steps.signing.outputs.pfx != ''
+      # Releases only: SignPath Foundation signs each release after it is approved by hand
+      # in SignPath, so this step waits (up to 2 hours) for that approval.
+      - name: Upload the unsigned installer for signing
+        id: upload-unsigned
+        if: env.SIGN_WITH_SIGNPATH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tasky-${{ steps.version.outputs.value }}-Windows-installer-unsigned
+          path: installer/Output/TaskySetup.exe
+          if-no-files-found: error
+
+      - name: Sign the installer with SignPath
+        if: env.SIGN_WITH_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'tasky' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: installer/Output/signed
+
+      - name: Use the signed installer
+        if: env.SIGN_WITH_SIGNPATH == 'true'
         shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          & "${{ steps.signing.outputs.signtool }}" sign /f "${{ steps.signing.outputs.pfx }}" /p $env:WINDOWS_CERTIFICATE_PASSWORD `
-            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 installer/Output/TaskySetup.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item installer/Output/signed/TaskySetup.exe installer/Output/TaskySetup.exe -Force
+          $signature = Get-AuthenticodeSignature installer/Output/TaskySetup.exe
+          Write-Host "Signature: $($signature.Status) by $($signature.SignerCertificate.Subject)"
+          if ($signature.Status -ne 'Valid') { exit 1 }
 
       - uses: actions/upload-artifact@v4
         with:

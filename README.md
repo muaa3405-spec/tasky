@@ -213,6 +213,32 @@ Ideas, bug reports and pull requests are welcome.
 Please don't commit build output, your database or personal settings
 (`.gitignore` already excludes them).
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The Windows installer is built from this repository's source by GitHub Actions
+([build-installers.yml](.github/workflows/build-installers.yml)) and sent to SignPath for signing.
+Only releases are signed, and each one is approved by hand first.
+
+| Role | Members |
+|------|---------|
+| Committers and reviewers | [Muhammad Aadil](https://github.com/muaa3405-spec) |
+| Approvers | [Muhammad Aadil](https://github.com/muaa3405-spec) |
+
+Changes from anyone outside the team arrive as pull requests and are reviewed before they are merged.
+
+## Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it.
+
+The one feature that goes online is the **update check**, which is off until you switch it on in
+Settings → Updates. It then asks GitHub's public API for the latest release number once a day; the
+request contains no information about you, your computer or your tasks. Everything else, including
+tasks, notes, time tracking, app usage and meeting detection, stays in the local folders listed
+under [Where your data lives](#where-your-data-lives).
+
 ## License
 
 [MIT](LICENSE) © 2026 Muhammad Aadil
