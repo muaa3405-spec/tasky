@@ -12,10 +12,7 @@
 
 **macOS:** open the `.dmg` and drag **Tasky** to **Applications**. The app isn't signed with an Apple Developer ID yet, so on first launch macOS says it can't check it for malicious software. To open it, **right-click Tasky → Open → Open**, or go to **System Settings → Privacy & Security → Open Anyway**. You only need to do this once.
 
-### What's new
-- **Repeat end date:** a repeating task can now stop on a date you choose (**Ends on**, optional) in New Task and Edit Task. Hover the **ⓘ** next to Repeat for what repeating does. The repeat badge on a task shows its end date when you hover it.
-- **Paste or drop attachments** (Ctrl+V / ⌘V, or drag files in) in **Edit Task**, not just pick them from a file browser.
-- **New Note** now has attachments too; they're saved with the note.
-
 ### Fixed
-- When you add several tasks in a row, each one now gets the group and repeat shown in the form. Before, the form kept showing your last choice while the task was saved as "Other" with no repeat.
+- **Tasky 1.1.1 closed straight away on launch** on Windows and macOS when you had tasks or notes with a description. 1.1.2 opens normally again.
+
+Your tasks, notes and attachments were never affected. They're kept outside the app folder, so installing 1.1.2 over 1.1.1 (or uninstalling first) keeps them. You don't need to uninstall: just run the new installer.
