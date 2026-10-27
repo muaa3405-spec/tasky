@@ -530,7 +530,7 @@
                                                         <Button.IsVisible>
                                                             <MultiBinding Converter="{x:Static BoolConverters.Or}">
                                                                 <Binding Path="IsDescriptionExpanded"/>
-                                                                <Binding ElementName="TaskDescriptionText" Path="(beh:TextOverflow.IsTrimmed)"/>
+                                                                <CompiledBinding Path="#TaskDescriptionText.(beh:TextOverflow.IsTrimmed)"/>
                                                             </MultiBinding>
                                                         </Button.IsVisible>
                                                     </Button>
@@ -805,7 +805,7 @@
                                                 <TextBlock Text="&#x22EF;" FontSize="16" FontWeight="Bold" LineHeight="14"
                                                            Foreground="{DynamicResource TextSecondary}"
                                                            ToolTip.Tip="Open the note to see all of it"
-                                                           IsVisible="{Binding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
+                                                           IsVisible="{CompiledBinding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
                                                 <!-- Tag chips (only rendered when there are tags) -->
                                                 <ItemsControl ItemsSource="{Binding TagList}" Margin="0,5,0,0"
                                                               IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
