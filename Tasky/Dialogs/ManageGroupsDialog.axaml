@@ -58,6 +58,7 @@
                                            Foreground="{DynamicResource TextPrimary}"
                                            VerticalAlignment="Center"/>
                                 <Button Grid.Column="2" Theme="{StaticResource IconButton}"
+                                        ToolTip.Tip="Delete group"
                                         Tag="{Binding Id}" Click="DeleteGroup_Click">
                                     <TextBlock Text="🗑" FontSize="13" Foreground="#F87171"/>
                                 </Button>

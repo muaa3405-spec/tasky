@@ -139,6 +139,8 @@ public partial class MainWindow : Window
         ApplyPlatformTexts();
         PopulateSoundPicker();
         InitTrayIcon();
+        RegisterKeyboardShortcuts();
+        ApplyTextScale(App.Settings.Current.TextScale);
 
         NewTaskAttachments.AcceptAttachmentsAnywhereIn(AddFormPanel);
         NewNoteAttachments.AcceptAttachmentsAnywhereIn(AddNotePanel);
@@ -402,12 +404,21 @@ public partial class MainWindow : Window
     // ─── In-app notification overlay ─────────────────────────────────────
 
     private DispatcherTimer? _notifTimer;
+    private NotificationAction? _notifAction;
 
-    public void ShowInAppNotification(string message, string accentHex, string icon)
+    private static readonly TimeSpan NotificationDuration       = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan ActionNotificationDuration = TimeSpan.FromSeconds(7);   // time to reach "Undo"
+
+    public void ShowInAppNotification(string message, string accentHex, string icon, NotificationAction? action = null)
     {
         // Set content
         NotifIcon.Text    = icon;
         NotifMessage.Text = message;
+
+        _notifAction = action;
+        NotifActionBtn.Content   = action?.Label;
+        NotifActionBtn.IsVisible = action is not null;
+        InAppNotifBorder.IsHitTestVisible = action is not null;   // otherwise clicks pass through to the page
 
         // Set accent colour + tinted background
         if (Color.TryParse(accentHex, out var col))
@@ -430,16 +441,26 @@ public partial class MainWindow : Window
         InAppNotifBorder.IsVisible = true;
         _ = Animator.Fade(InAppNotifBorder, 0, 1, TimeSpan.FromMilliseconds(200));
 
-        // Auto-dismiss after 3 s
         _notifTimer?.Stop();
-        _notifTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _notifTimer.Tick += async (_, _) =>
-        {
-            _notifTimer.Stop();
-            if (await Animator.Fade(InAppNotifBorder, 1, 0, TimeSpan.FromMilliseconds(250)))
-                InAppNotifBorder.IsVisible = false;
-        };
+        _notifTimer = new DispatcherTimer { Interval = action is null ? NotificationDuration : ActionNotificationDuration };
+        _notifTimer.Tick += (_, _) => _ = HideInAppNotification();
         _notifTimer.Start();
+    }
+
+    private async Task HideInAppNotification()
+    {
+        _notifTimer?.Stop();
+        _notifAction = null;
+        InAppNotifBorder.IsHitTestVisible = false;
+        if (await Animator.Fade(InAppNotifBorder, 1, 0, TimeSpan.FromMilliseconds(250)))
+            InAppNotifBorder.IsVisible = false;
+    }
+
+    private void NotifAction_Click(object? sender, RoutedEventArgs e)
+    {
+        var action = _notifAction;
+        _ = HideInAppNotification();
+        action?.Run();
     }
 
     private void OpenQuickAdd() => App.ShowQuickAdd();
@@ -663,6 +684,8 @@ public partial class MainWindow : Window
         // Task completion
         CompletionPopupToggle.IsChecked = s.ShowCompletionPopup;
         SaveScreenshotToggle.IsChecked  = s.SaveScreenshotToDesktop;
+
+        LoadDataToolsSettings();
     }
 
     private void SettingUserName_Changed(object? sender, TextChangedEventArgs e)
@@ -791,8 +814,12 @@ public partial class MainWindow : Window
     private async void Checkbox_Click(object? sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if (GetTaskVm(sender) is not { } vm) return;
+        if (GetTaskVm(sender) is { } vm) await ConfirmAndCompleteAsync(vm, sender as CheckBox);
+    }
 
+    /// <summary>Asks, then completes the task (from its checkbox or the Space shortcut).</summary>
+    private async Task ConfirmAndCompleteAsync(TaskItemViewModel vm, CheckBox? box = null)
+    {
         // The checkbox binding is one-way: clicking only ticks the box on screen and
         // the task itself is untouched until the user confirms. On cancel, untick it.
         var confirm = new ConfirmDialog(
@@ -801,8 +828,7 @@ public partial class MainWindow : Window
             "Mark Done", ConfirmType.Info);
         if (await ShowModalDialog(confirm) != true)
         {
-            if (sender is CheckBox box)
-                box.SetCurrentValue(ToggleButton.IsCheckedProperty, vm.IsCompleted);
+            box?.SetCurrentValue(ToggleButton.IsCheckedProperty, vm.IsCompleted);
             return;
         }
 
@@ -850,7 +876,12 @@ public partial class MainWindow : Window
 
     private void ActiveToggle_Click(object? sender, RoutedEventArgs e)
     {
-        if (GetTaskVm(sender) is not { } vm) return;
+        if (GetTaskVm(sender) is { } vm) ToggleTimer(vm);
+    }
+
+    /// <summary>Starts or stops the task's timer, animating the list as the task moves to the top.</summary>
+    private void ToggleTimer(TaskItemViewModel vm)
+    {
         var before = DragDropBehavior.CapturePositions(TaskListControl);
         Vm.ToggleActive(vm);
         Dispatcher.UIThread.Post(() => DragDropBehavior.AnimateFlip(TaskListControl, before), DispatcherPriority.Background);
@@ -863,7 +894,11 @@ public partial class MainWindow : Window
 
     private async void Edit_Click(object? sender, RoutedEventArgs e)
     {
-        if (GetTaskVm(sender) is not { } vm) return;
+        if (GetTaskVm(sender) is { } vm) await EditTaskAsync(vm);
+    }
+
+    private async Task EditTaskAsync(TaskItemViewModel vm)
+    {
         var dlg = new EditTaskDialog(vm, Vm);
         if (await ShowModalDialog(dlg) == true)
         {
@@ -888,10 +923,35 @@ public partial class MainWindow : Window
 
     private async void Delete_Click(object? sender, RoutedEventArgs e)
     {
-        if (GetTaskVm(sender) is not { } vm) return;
+        if (GetTaskVm(sender) is { } vm) await ConfirmAndDeleteAsync(vm);
+    }
+
+    private async Task ConfirmAndDeleteAsync(TaskItemViewModel vm)
+    {
         var dlg = new ConfirmDialog("Delete Task",
-            "Delete \"" + vm.Title + "\"?\n\nThis cannot be undone.", "Delete", ConfirmType.Danger);
+            $"Move \"{vm.Title}\" to the recycle bin?\n\nYou can restore it for {MainViewModel.TrashRetentionDays} days.",
+            "Delete", ConfirmType.Danger);
         if (await ShowModalDialog(dlg) == true) Vm.DeleteTask(vm);
+    }
+
+    // Postpone
+
+    private void Postpone_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control anchor && GetTaskVm(sender) is { } vm) ShowPostponeMenu(anchor, vm);
+    }
+
+    /// <summary>The "Tomorrow / Next week" menu, built per task so each item knows its task.</summary>
+    private void ShowPostponeMenu(Control anchor, TaskItemViewModel vm)
+    {
+        var menu = new MenuFlyout();
+        foreach (var option in PostponeOptions.All)
+        {
+            var item = new MenuItem { Header = option.Label };
+            item.Click += (_, _) => Vm.Postpone(vm, option.NewDueDate(DateTime.Today));
+            menu.Items.Add(item);
+        }
+        menu.ShowAt(anchor);
     }
 
     private void TaskContent_Click(object? sender, PointerReleasedEventArgs e)
@@ -1009,10 +1069,8 @@ public partial class MainWindow : Window
     private async void CompletedDelete_Click(object? sender, RoutedEventArgs e)
     {
         if (GetTaskVm(sender) is not { } vm) return;
-        var dlg = new ConfirmDialog("Delete Completed Task",
-            "Permanently delete \"" + vm.Title + "\"?\n\nThis cannot be undone.",
-            "Delete", ConfirmType.Danger);
-        if (await ShowModalDialog(dlg) == true) { Vm.DeleteTask(vm); RefreshCompletedList(); }
+        await ConfirmAndDeleteAsync(vm);   // completed tasks go to the recycle bin too
+        RefreshCompletedList();
     }
 
     // Recycle bin

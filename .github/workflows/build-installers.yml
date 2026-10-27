@@ -1,10 +1,16 @@
 # Builds the downloadable installers:
 #   • Windows — TaskySetup.exe (Inno Setup)
 #   • macOS   — Tasky-<version>-arm64.dmg (Apple silicon) and Tasky-<version>-x64.dmg (Intel)
-# The files are attached to each run under "Artifacts". The macOS job also starts the
-# app on a real Mac and keeps a screenshot, as a smoke test.
+# The files are attached to each run under "Artifacts". Before packaging, each platform starts
+# the app with sample tasks and notes and opens every page (scripts/smoke-test.*); a crash or a
+# logged error fails the build, so a broken installer can't be released.
 # Pushing a v* tag also publishes a GitHub Release with all three installers, using
 # installer/RELEASE_NOTES.md as its description.
+#
+# Code signing switches on by itself once these repository secrets exist (see BUILD.md):
+#   Windows: WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
+#   macOS:   MACOS_CERTIFICATE (base64 .p12), MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY,
+#            and for notarization APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 name: Build installers
 
 on:
@@ -21,12 +27,15 @@ jobs:
   windows:
     name: Windows installer
     runs-on: windows-2022
+    env:
+      # Secrets cannot be tested in a step condition directly.
+      HAS_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Read version
         id: version
@@ -36,7 +45,34 @@ jobs:
           "value=$version" >> $env:GITHUB_OUTPUT
 
       - name: Publish (self-contained, win-x64)
-        run: dotnet publish Tasky/Tasky.csproj -c Release -r win-x64 -o Tasky/bin/Release/net8.0/win-x64/publish
+        run: dotnet publish Tasky/Tasky.csproj -c Release -r win-x64 -o Tasky/bin/Release/net10.0/win-x64/publish
+
+      - name: Smoke test (sample data, every page)
+        shell: pwsh
+        run: ./scripts/smoke-test.ps1 -Exe Tasky/bin/Release/net10.0/win-x64/publish/Tasky.exe
+
+      - name: Prepare code signing
+        id: signing
+        if: env.HAS_WINDOWS_CERTIFICATE == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'tasky-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+          "pfx=$pfx" >> $env:GITHUB_OUTPUT
+          "signtool=$($signtool.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Sign Tasky.exe
+        if: steps.signing.outputs.pfx != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          & "${{ steps.signing.outputs.signtool }}" sign /f "${{ steps.signing.outputs.pfx }}" /p $env:WINDOWS_CERTIFICATE_PASSWORD `
+            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 Tasky/bin/Release/net10.0/win-x64/publish/Tasky.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build installer
         shell: pwsh
@@ -44,6 +80,16 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           & $iscc "/DAppVersion=${{ steps.version.outputs.value }}" installer\setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Sign installer
+        if: steps.signing.outputs.pfx != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          & "${{ steps.signing.outputs.signtool }}" sign /f "${{ steps.signing.outputs.pfx }}" /p $env:WINDOWS_CERTIFICATE_PASSWORD `
+            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 installer/Output/TaskySetup.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
@@ -55,6 +101,8 @@ jobs:
   macos:
     name: macOS dmg (${{ matrix.arch }})
     runs-on: macos-14
+    env:
+      HAS_MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE != '' }}
     strategy:
       matrix:
         arch: [arm64, x64]
@@ -63,30 +111,36 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
+
+      - name: Import the Developer ID certificate
+        if: env.HAS_MACOS_CERTIFICATE == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/tasky-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
       - name: Build Tasky.app and dmg
+        env:
+          SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: ./scripts/package-macos.sh ${{ matrix.arch }}
 
       # The runner is Apple silicon, so the arm64 build can be launched directly.
-      - name: Smoke test (start the app and take a screenshot)
+      - name: Smoke test (sample data, every page, screenshot)
         if: matrix.arch == 'arm64'
-        run: |
-          export TASKY_DATA_ROOT="$RUNNER_TEMP/tasky-smoke"
-          export TASKY_SMOKE_REMINDER=1   # shows a sample reminder, which should sit at the bottom right
-          dist/Tasky.app/Contents/MacOS/Tasky &
-          PID=$!
-          sleep 25
-          screencapture -x "$RUNNER_TEMP/tasky-macos.png" || true
-          LOGS="$TASKY_DATA_ROOT/Local/Tasky/logs"
-          if [ -d "$LOGS" ]; then echo "── Tasky log ──"; cat "$LOGS"/*.log; fi
-          if kill -0 "$PID" 2>/dev/null; then
-            echo "Tasky is running"
-            kill "$PID"
-          else
-            echo "Tasky exited during start-up"
-            exit 1
-          fi
+        run: ./scripts/smoke-test.sh dist/Tasky.app/Contents/MacOS/Tasky "$RUNNER_TEMP/tasky-macos.png"
 
       - uses: actions/upload-artifact@v4
         if: matrix.arch == 'arm64' && always()

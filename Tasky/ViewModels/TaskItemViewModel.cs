@@ -151,6 +151,14 @@ public class TaskItemViewModel : INotifyPropertyChanged
 
     public string ShowMoreLabel => _isDescriptionExpanded ? "Show less ▲" : "Show more ▼";
 
+    private bool _isSelected;
+    /// <summary>Picked with the arrow keys; keyboard shortcuts act on this task.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { if (_isSelected == value) return; _isSelected = value; OnPropertyChanged(); }
+    }
+
     public DateTime? DueDate
     {
         get => _model.DueDate;

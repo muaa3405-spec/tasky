@@ -1,0 +1,40 @@
+<!-- Shown instead of the main window when Tasky fails to start. It uses only built-in controls and
+     fixed colours, so it still opens when something in Tasky's own styles or layout is broken. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Tasky.Windows.SafeModeWindow"
+        Title="Tasky couldn't start"
+        Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Background="#111827">
+    <StackPanel Margin="28,24" Spacing="14">
+        <TextBlock Text="Tasky couldn't start" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+        <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="#D1D5DB"
+                   Text="Something went wrong while Tasky was opening. Your tasks, notes and attachments are safe: nothing has been deleted."/>
+
+        <Border Background="#1F2937" CornerRadius="8" Padding="12,10">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Your data is in" FontSize="11" Foreground="#9CA3AF"/>
+                <SelectableTextBlock x:Name="DataFolderText" FontSize="12" Foreground="White" TextWrapping="Wrap"/>
+                <TextBlock Text="What went wrong" FontSize="11" Foreground="#9CA3AF" Margin="0,6,0,0"/>
+                <SelectableTextBlock x:Name="ErrorText" FontSize="12" Foreground="#FCA5A5" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="BackupHint" TextWrapping="Wrap" FontSize="12" Foreground="#D1D5DB"/>
+
+        <StackPanel Spacing="8">
+            <Button x:Name="RestoreButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Padding="12,8" Background="#2563EB" Foreground="White"
+                    Click="Restore_Click"/>
+            <Button Content="Open the data folder" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Padding="12,8" Click="OpenDataFolder_Click"/>
+            <Button Content="Open the error log" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Padding="12,8" Click="OpenLog_Click"/>
+            <Button Content="Get the latest version of Tasky" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Padding="12,8" Click="Download_Click"/>
+            <Button Content="Quit" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Padding="12,8" Click="Quit_Click"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

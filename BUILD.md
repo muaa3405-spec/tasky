@@ -10,7 +10,7 @@ Windows and a macOS implementation under `Tasky/Platform/`.
 
 | Tool | Needed for | Download |
 |------|------------|----------|
-| .NET 8 SDK | building and running (Windows or macOS) | https://dotnet.microsoft.com/download/dotnet/8.0 |
+| .NET 10 SDK | building and running (Windows or macOS) | https://dotnet.microsoft.com/download/dotnet/10.0 |
 | Visual Studio 2022, Rider or VS Code with C# Dev Kit | editing (optional) | |
 | Inno Setup 6 | the Windows installer only (Windows) | https://jrsoftware.org/isdl.php |
 | Xcode Command Line Tools | the macOS app bundle only (`xcode-select --install`) | |
@@ -26,7 +26,7 @@ Supported systems: Windows 10 (version 2004) or later, 64-bit, and macOS 12 or l
 Tasky/
 ├── Tasky.sln
 ├── Tasky/
-│   ├── Tasky.csproj            ← .NET 8 + Avalonia, one project for Windows and macOS
+│   ├── Tasky.csproj            ← .NET 10 + Avalonia, one project for Windows and macOS
 │   ├── Program.cs              ← entry point, fonts
 │   ├── App.axaml / .cs         ← startup, single-instance, theme, services
 │   ├── MainWindow.axaml / .cs  ← main UI + tray + event handlers
@@ -87,7 +87,7 @@ The Windows folder contains `Tasky.exe` plus its DLLs; copy it anywhere and run 
 1. Publish for Windows into the folder the script expects:
 
    ```powershell
-   dotnet publish Tasky/Tasky.csproj -c Release -r win-x64 -o Tasky/bin/Release/net8.0/win-x64/publish
+   dotnet publish Tasky/Tasky.csproj -c Release -r win-x64 -o Tasky/bin/Release/net10.0/win-x64/publish
    ```
 
 2. Compile the installer:
@@ -114,12 +114,51 @@ The script publishes Tasky, wraps it in `dist/Tasky.app` (with its icon and
 `Info.plist`), signs it ad hoc so it runs on your own Mac, and builds `dist/Tasky.dmg`.
 
 To give the app to other people without the "unidentified developer" warning, sign it
-with an Apple Developer ID and notarize it (needs a paid Apple Developer account):
+with an Apple Developer ID and notarize it (needs a paid Apple Developer account). The
+script does both when you give it the identity and your Apple credentials:
 
 ```bash
-codesign --force --deep --options runtime --sign "Developer ID Application: <Your Name>" dist/Tasky.app
-xcrun notarytool submit dist/Tasky.dmg --keychain-profile <profile> --wait
-xcrun stapler staple dist/Tasky.dmg
+SIGN_IDENTITY="Developer ID Application: <Your Name> (<TEAMID>)" \
+APPLE_ID="you@example.com" APPLE_TEAM_ID="<TEAMID>" APPLE_APP_PASSWORD="<app-specific password>" \
+./scripts/package-macos.sh
+```
+
+---
+
+## Code signing in CI
+
+Unsigned installers work, but Windows SmartScreen and macOS Gatekeeper warn people before
+they open them. The **Build installers** workflow signs everything by itself as soon as
+these repository secrets exist (GitHub → Settings → Secrets and variables → Actions).
+Without them it keeps building unsigned installers, as today.
+
+| Secret | What to put in it |
+|--------|-------------------|
+| `WINDOWS_CERTIFICATE` | Your code-signing certificate (`.pfx`), base64: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))` |
+| `WINDOWS_CERTIFICATE_PASSWORD` | The `.pfx` password |
+| `MACOS_CERTIFICATE` | Your "Developer ID Application" certificate exported from Keychain as `.p12`, base64: `base64 -i cert.p12` |
+| `MACOS_CERTIFICATE_PASSWORD` | The `.p12` password |
+| `MACOS_SIGN_IDENTITY` | e.g. `Developer ID Application: Muhammad Aadil (ABCDE12345)` |
+| `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | For notarization: your Apple ID, team ID, and an app-specific password from appleid.apple.com |
+
+Where to get the certificates: a Windows **code-signing certificate** from a certificate
+authority (for example Certum, Sectigo or DigiCert; an OV certificate is enough), and an
+Apple **Developer ID** from the Apple Developer Program.
+
+---
+
+## Smoke test
+
+Every CI build starts the app against sample tasks and notes, opens every page and fails
+if Tasky crashes or logs an error, so a broken build can't become an installer. Run it
+yourself after publishing (it never touches your real data):
+
+```powershell
+./scripts/smoke-test.ps1 -Exe Tasky/bin/Release/net10.0/win-x64/publish/Tasky.exe
+```
+
+```bash
+./scripts/smoke-test.sh dist/Tasky.app/Contents/MacOS/Tasky
 ```
 
 Tasky needs **no special macOS permissions**: idle time, the frontmost app name, the
@@ -156,8 +195,8 @@ OS works differently:
 
 ## Data Location
 
-| System | Data (database, settings, attachments) | Logs and import safety copies |
-|--------|----------------------------------------|-------------------------------|
+| System | Data (database, settings, attachments) | Logs, daily backups and safety copies |
+|--------|----------------------------------------|---------------------------------------|
 | Windows | `%APPDATA%\Tasky\` | `%LOCALAPPDATA%\Tasky\` |
 | macOS | `~/Library/Application Support/Tasky/` | `~/Library/Application Support/Tasky Local/` |
 
@@ -197,4 +236,10 @@ TASKY_DATA_ROOT="$TMPDIR/tasky-sandbox" dotnet run --project Tasky/Tasky.csproj
 | Reminder pop-ups | `ReminderToastWindow`, Tasky's own themed window (bottom-right of the screen) |
 | Idle / lock / sleep pause | `IdleMonitorService` + `IUserActivity` (Windows session events / macOS polling) |
 | SQLite persistence | `DatabaseService`, WAL mode |
+| Daily backups | `BackupService`: `VACUUM INTO` snapshot + settings, once a day, last 14 kept; restore is staged and applied at the next start |
+| Safe mode | If start-up throws, `App` shows `SafeModeWindow` (restore latest backup, open data folder / log) instead of closing |
+| Undo | `UndoService` keeps the last complete / delete / postpone; the notification's Undo button or Ctrl+Z / ⌘Z runs it |
+| Keyboard shortcuts | `MainWindow.Keyboard.cs`; the list shown to users is `Helpers/KeyboardShortcuts.cs` |
+| Export / import / print | `Services/DataExchange` (CSV both ways, Markdown, printable HTML opened in the browser) |
+| Update check | `UpdateCheckService`, off by default; one anonymous request to the GitHub releases API |
 | Single instance | Named mutex; a second launch signals the first (named event on Windows, local pipe on macOS) and exits |

@@ -50,4 +50,6 @@ public static class AppPaths
     public static string PendingImportFolder => Path.Combine(LocalFolder, "pending-import");
     public static string ImportBackupsFolder => Path.Combine(LocalFolder, "before-import");
     public static string TempFolder          => Path.Combine(LocalFolder, "temp");
+    public static string BackupsFolder       => Path.Combine(LocalFolder, "backups");
+    public static string PendingRestoreFile  => Path.Combine(LocalFolder, "pending-restore.txt");
 }
