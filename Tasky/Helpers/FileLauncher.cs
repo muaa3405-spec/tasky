@@ -9,6 +9,35 @@ public static class FileLauncher
 {
     private static string OsName => OperatingSystem.IsMacOS() ? "macOS" : "Windows";
 
+    /// <summary>Shows a folder in Explorer or Finder, creating it first if needed.</summary>
+    public static void OpenFolder(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write($"Could not open folder '{folder}'", ex);
+            InAppNotificationService.Warning($"Couldn't open the folder. It is at {folder}");
+        }
+    }
+
+    /// <summary>Opens a web page in the default browser.</summary>
+    public static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write($"Could not open '{url}'", ex);
+            InAppNotificationService.Warning($"Couldn't open your browser. The address is {url}");
+        }
+    }
+
     public static void Open(string path)
     {
         if (!File.Exists(path))

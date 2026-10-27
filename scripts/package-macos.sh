@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Builds Tasky.app and Tasky.dmg for macOS. Run on a Mac with the .NET 8 SDK and
+# Builds Tasky.app and Tasky.dmg for macOS. Run on a Mac with the .NET 10 SDK and
 # the Xcode Command Line Tools (sips, iconutil, codesign, hdiutil).
 #
 #   ./scripts/package-macos.sh          # Apple silicon (arm64)
 #   ./scripts/package-macos.sh x64      # Intel
 #
-# The app is signed ad hoc, which is enough to run it on your own Mac. To share it,
-# sign with a Developer ID and notarize it (see BUILD.md).
+# Without SIGN_IDENTITY the app is signed ad hoc, which is enough to run it on your own Mac.
+# To share it, set SIGN_IDENTITY="Developer ID Application: … (TEAMID)", and APPLE_ID,
+# APPLE_TEAM_ID and APPLE_APP_PASSWORD to notarize it too (see BUILD.md).
 set -euo pipefail
 
 ARCH="${1:-arm64}"
@@ -58,8 +59,16 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "▸ Signing (ad hoc)"
-codesign --force --deep --sign - "$APP"
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+  # Developer ID + hardened runtime: needed for notarization. .NET's JIT needs the entitlements.
+  echo "▸ Signing with $SIGN_IDENTITY"
+  codesign --force --deep --timestamp --options runtime \
+           --entitlements "$ROOT/scripts/macos-entitlements.plist" \
+           --sign "$SIGN_IDENTITY" "$APP"
+else
+  echo "▸ Signing (ad hoc)"
+  codesign --force --deep --sign - "$APP"
+fi
 
 echo "▸ Building Tasky.dmg"
 DMG="$DIST/Tasky-$VERSION-$ARCH.dmg"
@@ -71,6 +80,17 @@ for attempt in 1 2 3 4 5; do
   echo "  hdiutil failed (attempt $attempt), retrying in 5 s"
   sleep 5
 done
+
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+  # Notarize when Apple credentials are given (an app-specific password from appleid.apple.com).
+  if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
+    echo "▸ Notarizing (this can take a few minutes)"
+    xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+                                   --password "$APPLE_APP_PASSWORD" --wait
+    xcrun stapler staple "$DMG"
+  fi
+fi
 
 echo "✔ Done: $APP"
 echo "✔ Done: $DMG"

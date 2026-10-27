@@ -1,0 +1,22 @@
+<!-- The keyboard shortcut table, shared by Settings and the "Good to know" dialog -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:helpers="using:Tasky.Helpers"
+             x:Class="Tasky.Controls.ShortcutList">
+    <ItemsControl ItemsSource="{x:Static helpers:KeyboardShortcuts.All}">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="helpers:KeyboardShortcut">
+                <Grid ColumnDefinitions="150,*" Margin="0,0,0,6">
+                    <Border Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Background="{DynamicResource TagBackground}" CornerRadius="4" Padding="7,2">
+                        <TextBlock Text="{Binding Keys}" FontSize="11" FontWeight="SemiBold"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   Foreground="{DynamicResource TagForeground}"/>
+                    </Border>
+                    <TextBlock Grid.Column="1" Text="{Binding Action}" FontSize="12" TextWrapping="Wrap"
+                               VerticalAlignment="Center" Foreground="{DynamicResource TextPrimary}"/>
+                </Grid>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

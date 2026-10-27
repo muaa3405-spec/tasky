@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Tasky.Behaviors;
 using Tasky.Platform;
 using Tasky.Services;
 using Tasky.Services.Migration;
@@ -28,6 +29,7 @@ public partial class App : Application
     public static IdleMonitorService? IdleMonitor { get; private set; }
     public static MeetingMonitorService? MeetingMonitor { get; private set; }
     public static AppUsageService? AppUsage { get; private set; }
+    public static BackupService? Backups { get; private set; }
     public static SettingsService  Settings  { get; } = new();
     public static MainWindow? MainAppWindow { get; private set; }
 
@@ -57,11 +59,34 @@ public partial class App : Application
         _singleInstance.ListenForActivation(() =>
             Dispatcher.UIThread.Post(() => MainAppWindow?.ShowFromTray()));
 
-        var importResult = ApplyPendingImport();   // must run before anything opens the data files
+        try
+        {
+            StartTasky();
+        }
+        catch (Exception ex)
+        {
+            // Instead of closing silently, explain what happened and offer a way out.
+            CrashLog.Write("Tasky could not start", ex);
+            ShowSafeMode(ex);
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    private void StartTasky()
+    {
+        // Both must run before anything opens the data files.
+        var importResult  = ApplyPendingImport();
+        var restoreResult = ApplyPendingRestore();
         Settings.Load();
 
         Database = new DatabaseService();
         Database.Initialize();
+        SmokeTest.SeedSampleDataIfRequested(Database);
+
+        Backups = new BackupService(Database);
+        Backups.BackUpIfDueInBackground();
+        StartBackupTimer();
 
         Notifications = new NotificationService(Database);
 
@@ -98,6 +123,8 @@ public partial class App : Application
         AppUsage = new AppUsageService(Database, PlatformServices.CreateForegroundAppMonitor(), _userActivity);
         AppUsage.Start();
 
+        AccessibleNames.Register();
+
         var mainWindow = new MainWindow { DataContext = ViewModel };
         MainAppWindow = mainWindow;
         Desktop.MainWindow = mainWindow;
@@ -111,44 +138,87 @@ public partial class App : Application
             if (ViewModel!.Tasks.Any(t => t.WasInterrupted))
                 InAppNotificationService.Info("⏸  Your timer was paused because Tasky closed while it was running.");
             importResult?.Notify();
+            restoreResult?.Notify();
 
             Hotkey = PlatformServices.CreateQuickAddHotkey();
             Hotkey.Register(ShowQuickAdd);
             SmokeTest.ShowReminderIfRequested();
+            SmokeTest.VisitAllPagesIfRequested(mainWindow);
+            mainWindow.ShowWelcomeTipsOnFirstStart();
+            _ = mainWindow.CheckForUpdatesIfDueAsync();
         }
         mainWindow.Opened += OnFirstOpened;
         mainWindow.Show();
 
         // Initialize auto theme AFTER window is created
         InitializeAutoTheme();
-
-        base.OnFrameworkInitializationCompleted();
     }
 
     /// <summary>Ends the app (tray "Exit Tasky", restart after an import).</summary>
     public static void Shutdown() => Instance.Desktop.Shutdown();
 
-    /// <summary>Outcome of a migration import applied at startup, reported once the window is up.</summary>
-    private sealed record ImportOutcome(bool Succeeded)
+    // ─── Start-up failure ─────────────────────────────────────────────────
+
+    private void ShowSafeMode(Exception error)
+    {
+        StopServices();
+        if (MainAppWindow is { } broken)
+        {
+            MainAppWindow = null;
+            try { broken.DisposeTray(); broken.Close(); } catch { /* it is already broken */ }
+        }
+
+        var safeMode = new Windows.SafeModeWindow(error);
+        safeMode.Closed += (_, _) => Shutdown();
+        Desktop.MainWindow = safeMode;
+        safeMode.Show();
+    }
+
+    // ─── Backups ──────────────────────────────────────────────────────────
+
+    /// <summary>How often a running Tasky checks whether a daily backup is due.</summary>
+    private static readonly TimeSpan BackupCheckInterval = TimeSpan.FromHours(1);
+
+    private static DispatcherTimer? _backupTimer;
+
+    private static void StartBackupTimer()
+    {
+        _backupTimer = new DispatcherTimer { Interval = BackupCheckInterval };
+        _backupTimer.Tick += (_, _) => Backups?.BackUpIfDueInBackground();
+        _backupTimer.Start();
+    }
+
+    // ─── Data swapped in at start-up (migration import, backup restore) ───
+
+    /// <summary>Outcome of an import or restore applied at startup, reported once the window is up.</summary>
+    private sealed record StartupSwapOutcome(bool Succeeded, string SuccessMessage, string FailureMessage)
     {
         public void Notify()
         {
-            if (Succeeded)
-                InAppNotificationService.Success("✔  Your Tasky data has been imported. Welcome back!");
-            else
-                InAppNotificationService.Error($"Import failed, so your existing data was kept. Details: {CrashLog.CurrentFile}");
+            if (Succeeded) InAppNotificationService.Success(SuccessMessage);
+            else           InAppNotificationService.Error($"{FailureMessage} Details: {CrashLog.CurrentFile}");
         }
     }
 
-    private static ImportOutcome? ApplyPendingImport()
+    private static StartupSwapOutcome? ApplyPendingImport()
+        => ApplyStartupSwap(MigrationService.ApplyPendingImport,
+            "✔  Your Tasky data has been imported. Welcome back!",
+            "Import failed, so your existing data was kept.");
+
+    private static StartupSwapOutcome? ApplyPendingRestore()
+        => ApplyStartupSwap(BackupService.ApplyPendingRestore,
+            "✔  Your backup has been restored.",
+            "Restoring the backup failed, so your existing data was kept.");
+
+    private static StartupSwapOutcome? ApplyStartupSwap(Func<bool> apply, string success, string failure)
     {
         try
         {
-            return MigrationService.ApplyPendingImport() ? new ImportOutcome(true) : null;
+            return apply() ? new StartupSwapOutcome(true, success, failure) : null;
         }
         catch
         {
-            return new ImportOutcome(false);   // already logged; current data restored
+            return new StartupSwapOutcome(false, success, failure);   // already logged; current data restored
         }
     }
 
@@ -224,7 +294,16 @@ public partial class App : Application
 
     private static void OnExit()
     {
+        StopServices();
+        MainAppWindow?.DisposeTray();
+        _singleInstance?.Dispose();
+    }
+
+    /// <summary>Saves timers and stops every background service (on exit, or when start-up fails).</summary>
+    private static void StopServices()
+    {
         PauseRunningTimers();
+        _backupTimer?.Stop();
         _checkpoints?.Dispose();
         AppUsage?.Dispose();
         if (OperatingSystem.IsWindows()) MeetingMonitor?.Dispose();
@@ -232,7 +311,5 @@ public partial class App : Application
         _userActivity?.Dispose();
         Hotkey?.Dispose();
         ReminderScheduler?.Stop();
-        MainAppWindow?.DisposeTray();
-        _singleInstance?.Dispose();
     }
 }

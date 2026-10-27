@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Tasky.Helpers;
 using Tasky.Models;
 using Tasky.Services;
+using Tasky.Services.DataExchange;
 
 namespace Tasky.ViewModels;
 
@@ -568,41 +569,162 @@ public class MainViewModel : INotifyPropertyChanged
         RefreshVisibleTasks();
         OnPropertyChanged(nameof(ActiveTask));
 
-        // Handle recurrence
-        if (vm.Recurrence != RecurrenceType.None)
+        var (nextOccurrence, recurrenceNote) = ScheduleNextOccurrence(vm);
+        RecordUndo($"Completed \"{vm.Title}\"", $"Completed \"{vm.Title}\".{recurrenceNote}",
+                   () => UndoCompletion(vm, nextOccurrence));
+        return true;
+    }
+
+    /// <summary>
+    /// For a repeating task, adds its next occurrence to the open list.
+    /// Returns the new task (null when none was added) and a sentence for the user.
+    /// </summary>
+    private (TaskItemViewModel? Next, string Note) ScheduleNextOccurrence(TaskItemViewModel completed)
+    {
+        if (completed.Recurrence == RecurrenceType.None) return (null, string.Empty);
+
+        // Un-completing and re-completing must not stack up copies of the next occurrence.
+        if (HasOpenOccurrence(completed)) return (null, string.Empty);
+
+        DateTime nextDue = RecurrenceRules.NextDueDate(completed.Recurrence);
+        if (!RecurrenceRules.ContinuesOn(nextDue, completed.RecurrenceEndDate))
+            return (null, $" It has finished repeating (ended {completed.RecurrenceEndDate:MMM d}).");
+
+        var newTask = new TaskItem
         {
-            DateTime nextDue = RecurrenceRules.NextDueDate(vm.Recurrence);
+            Title             = completed.Title,
+            Description       = completed.Description,
+            DueDate           = nextDue,
+            GroupId           = completed.GroupId,
+            Recurrence        = completed.Recurrence,
+            RecurrenceEndDate = completed.RecurrenceEndDate,
+            SortOrder         = Tasks.Count
+        };
+        _db.InsertTask(newTask);
+        var next = new TaskItemViewModel(newTask);
+        WireViewModel(next);
+        Tasks.Add(next);
+        InsertAtDueDatePosition(next);
+        PersistSortOrder();
+        RefreshVisibleTasks();
+        return (next, $" The next one is on {nextDue:MMM d}.");
+    }
 
-            // Un-completing and re-completing must not stack up copies of the next occurrence.
-            if (HasOpenOccurrence(vm)) return true;
+    private void UndoCompletion(TaskItemViewModel completed, TaskItemViewModel? nextOccurrence)
+    {
+        if (nextOccurrence is not null && Tasks.Contains(nextOccurrence))
+        {
+            // The occurrence was created by this completion, so it goes away entirely.
+            _db.DeleteTask(nextOccurrence.Id);
+            _attachments.DeleteFolder(AttachmentFolders.ForTask(nextOccurrence.Id));
+            nextOccurrence.Detach();
+            Tasks.Remove(nextOccurrence);
+        }
+        if (!CompletedTasks.Contains(completed)) return;
+        completed.CompletedAt = null;
+        UncompleteTask(completed);
+        MoveToDueDatePosition(completed);
+    }
 
-            if (!RecurrenceRules.ContinuesOn(nextDue, vm.RecurrenceEndDate))
+    // ── Postpone ─────────────────────────────────────────────────────────────
+
+    /// <summary>Moves an open task to a later day; the change can be undone.</summary>
+    public void Postpone(TaskItemViewModel vm, DateTime newDueDate)
+    {
+        if (!Tasks.Contains(vm)) return;
+        var previousDueDate = vm.DueDate;
+        SetDueDate(vm, newDueDate);
+        RecordUndo($"Postponed \"{vm.Title}\"", $"\"{vm.Title}\" moved to {newDueDate:ddd d MMM}.",
+                   () => { if (Tasks.Contains(vm)) SetDueDate(vm, previousDueDate); });
+    }
+
+    private void SetDueDate(TaskItemViewModel vm, DateTime? dueDate)
+    {
+        vm.DueDate = dueDate;
+        SaveTask(vm);
+        MoveToDueDatePosition(vm);
+        RefreshVisibleTasks();
+    }
+
+    // ── Export / import / print ──────────────────────────────────────────────
+
+    /// <summary>Every open and completed task (not the recycle bin), for an export.</summary>
+    public List<TaskExportRow> ExportAllTasks()
+        => [.. Tasks.Concat(CompletedTasks).OrderBy(t => t.TaskNumber).Select(ToExportRow)];
+
+    /// <summary>Open tasks in one of the date views, in list order, for printing.</summary>
+    public List<TaskExportRow> OpenTasksIn(TaskFilter filter)
+        => [.. Tasks.Where(t => TaskDateFilters.Matches(filter, t.DueDate, DateTime.Today)).Select(ToExportRow)];
+
+    private static TaskExportRow ToExportRow(TaskItemViewModel t) => new(
+        t.TaskNumber, t.Title, t.Description, t.GroupBadge, t.DueDate, t.Recurrence, t.RecurrenceEndDate,
+        t.IsCompleted, t.CompletedAt,
+        MinutesSpent: t.TotalSeconds > 0 ? t.TotalSeconds / 60 : t.ManualTimeMinutes ?? 0,
+        t.Model.CreatedAt);
+
+    /// <summary>Colours given to groups that an import creates, in turn.</summary>
+    private static readonly string[] ImportedGroupColors = ["#3B82F6", "#22C55E", "#F59E0B", "#A855F7", "#EC4899", "#14B8A6"];
+
+    /// <summary>Adds imported tasks (creating any group they name that does not exist yet). Returns how many groups were created.</summary>
+    public int ImportTasks(IReadOnlyList<TaskExportRow> rows)
+    {
+        int groupsBefore = Groups.Count;
+        foreach (var row in rows)
+        {
+            var task = new TaskItem
             {
-                InAppNotificationService.Info($"\"{vm.Title}\" has finished repeating (ended {vm.RecurrenceEndDate:MMM d}).");
-                return true;
-            }
-
-            var newTask = new TaskItem
-            {
-                Title             = vm.Title,
-                Description       = vm.Description,
-                DueDate           = nextDue,
-                GroupId           = vm.GroupId,
-                Recurrence        = vm.Recurrence,
-                RecurrenceEndDate = vm.RecurrenceEndDate,
+                Title             = row.Title,
+                Description       = row.Description,
+                GroupId           = FindOrCreateGroup(row.Group),
+                DueDate           = row.DueDate,
+                Recurrence        = row.Repeat,
+                RecurrenceEndDate = row.Repeat == RecurrenceType.None ? null : row.RepeatEnds,
+                IsCompleted       = row.IsCompleted,
+                CompletedAt       = row.CompletedAt,
+                ManualTimeMinutes = row.MinutesSpent > 0 ? row.MinutesSpent : null,
+                CreatedAt         = row.CreatedAt,
                 SortOrder         = Tasks.Count
             };
-            _db.InsertTask(newTask);
-            var newRecurVm = new TaskItemViewModel(newTask);
-            WireViewModel(newRecurVm);
-            Tasks.Add(newRecurVm);
-            InsertAtDueDatePosition(newRecurVm);
-            PersistSortOrder();
-            RefreshVisibleTasks();
-            InAppNotificationService.Info($"Recurring task scheduled for {nextDue:MMM d}");
+            _db.InsertTask(task);
+            var vm = new TaskItemViewModel(task);
+            WireViewModel(vm);
+            if (task.IsCompleted) CompletedTasks.Add(vm);
+            else { Tasks.Add(vm); InsertAtDueDatePosition(vm); }
         }
 
-        return true;
+        var completed = CompletedTasks.OrderByDescending(v => v.CompletedAt ?? DateTime.MinValue).ToList();
+        CompletedTasks.Clear();
+        foreach (var vm in completed) CompletedTasks.Add(vm);
+        PersistSortOrder();
+        RefreshFilteredCompleted();
+        RefreshVisibleTasks();
+        return Groups.Count - groupsBefore;
+    }
+
+    private int? FindOrCreateGroup(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return NewTaskGroupId;
+        var existing = Groups.FirstOrDefault(g => g.Name.Equals(name.Trim(), StringComparison.CurrentCultureIgnoreCase));
+        if (existing is not null) return existing.Id;
+        AddGroup(name, ImportedGroupColors[Groups.Count % ImportedGroupColors.Length]);
+        return Groups[^1].Id;
+    }
+
+    // ── Undo ─────────────────────────────────────────────────────────────────
+
+    public UndoService Undo { get; } = new();
+
+    /// <summary>Reverses the most recent complete / delete / postpone, and tells the user.</summary>
+    public void UndoLast()
+    {
+        if (Undo.UndoLast() is { } description) InAppNotificationService.Success($"Undone: {description}.");
+        else                                     InAppNotificationService.Info("There is nothing to undo.");
+    }
+
+    private void RecordUndo(string description, string message, Action undo)
+    {
+        Undo.Record(description, undo);
+        InAppNotificationService.Undoable(message, UndoLast);
     }
 
     /// <summary>
@@ -633,6 +755,7 @@ public class MainViewModel : INotifyPropertyChanged
     public void DeleteTask(TaskItemViewModel vm)
     {
         if (vm.IsActive) vm.IsActive = false;   // stop any running timer before trashing
+        var reminders = _db.GetRemindersForTask(vm.Id);   // kept so an undo can put them back
         _db.SoftDeleteTask(vm.Id);
         _db.DeleteRemindersForTask(vm.Id);       // trashed tasks should not fire reminders
         vm.DeletedAt = DateTime.Now;
@@ -642,6 +765,13 @@ public class MainViewModel : INotifyPropertyChanged
         VisibleTasks.Remove(vm);
         DeletedTasks.Insert(0, vm);
         OnPropertyChanged(nameof(ActiveTask));
+
+        RecordUndo($"Deleted \"{vm.Title}\"", $"\"{vm.Title}\" moved to the recycle bin.", () =>
+        {
+            if (!DeletedTasks.Contains(vm)) return;
+            foreach (var reminder in reminders) { reminder.Id = 0; _db.InsertReminder(reminder); }
+            RestoreTask(vm);
+        });
     }
 
     // ── Recycle bin ──────────────────────────────────────────────────────────
@@ -735,10 +865,6 @@ public class MainViewModel : INotifyPropertyChanged
     {
         VisibleTasks.Clear();
         var today  = DateTime.Today;
-        // Monday -> Friday of the current week (Monday is the week start).
-        int daysFromMonday = ((int)today.DayOfWeek + 6) % 7; // Sun=6, Mon=0, ... Sat=5
-        var weekStart = today.AddDays(-daysFromMonday);       // this week's Monday
-        var weekEnd   = weekStart.AddDays(4);                 // this week's Friday
         var search = _taskSearch.Trim();
         bool hasSearch = !string.IsNullOrEmpty(search);
 
@@ -754,13 +880,7 @@ public class MainViewModel : INotifyPropertyChanged
             // When searching, show all matching tasks regardless of date/group filter
             if (hasSearch) { VisibleTasks.Add(vm); continue; }
 
-            bool dateMatch  = _activeFilter == TaskFilter.All
-                || (_activeFilter == TaskFilter.Today &&
-                    (!vm.DueDate.HasValue || vm.DueDate.Value.Date <= today))
-                || (_activeFilter == TaskFilter.ThisWeek &&
-                    vm.DueDate.HasValue &&
-                    vm.DueDate.Value.Date >= weekStart &&
-                    vm.DueDate.Value.Date <= weekEnd);
+            bool dateMatch  = TaskDateFilters.Matches(_activeFilter, vm.DueDate, today);
             bool groupMatch = _selectedGroupFilter == null || vm.GroupId == _selectedGroupFilter;
             if (dateMatch && groupMatch) VisibleTasks.Add(vm);
         }
@@ -930,6 +1050,16 @@ public class MainViewModel : INotifyPropertyChanged
 
         if (currentPos != target)
             Tasks.Move(currentPos, target);
+    }
+
+    /// <summary>Puts an open task back where its (changed) due date belongs.</summary>
+    private void MoveToDueDatePosition(TaskItemViewModel vm)
+    {
+        int current = Tasks.IndexOf(vm);
+        if (current < 0) return;
+        Tasks.Move(current, Tasks.Count - 1);   // InsertAtDueDatePosition looks only at the tasks before it
+        InsertAtDueDatePosition(vm);
+        PersistSortOrder();
     }
 
     public void PersistSortOrder()

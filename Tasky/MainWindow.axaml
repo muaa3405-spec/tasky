@@ -161,8 +161,16 @@
         <Style Selector="TextBox#DescInputBox:disabled /template/ TextBlock#PART_Watermark">
             <Setter Property="IsVisible" Value="False"/>
         </Style>
+
+        <!-- The task picked with the arrow keys (keyboard shortcuts act on it) -->
+        <Style Selector="Border.selectedTask">
+            <Setter Property="BorderBrush"     Value="{DynamicResource PrimaryBlue}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
     </Window.Styles>
 
+    <!-- Zooms everything for Settings → Text size -->
+    <LayoutTransformControl x:Name="ZoomHost">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -268,7 +276,8 @@
                     <Button x:Name="EmptyBinBtn" Click="EmptyBin_Click" Margin="0,0,8,0"
                             Theme="{StaticResource EmptyBinLink}"
                             IsVisible="False" ToolTip.Tip="Permanently delete all items in the bin"/>
-                    <Button Theme="{StaticResource IconButton}" Click="ThemeToggle_Click" Margin="0,0,2,0">
+                    <Button Theme="{StaticResource IconButton}" Click="ThemeToggle_Click" Margin="0,0,2,0"
+                            ToolTip.Tip="Switch between dark and light">
                         <TextBlock x:Name="SubThemeIcon" Text="&#x1F319;" FontSize="15"/>
                     </Button>
                 </StackPanel>
@@ -433,7 +442,8 @@
                 <Border Grid.Row="1" Background="{DynamicResource HeaderBackground}"
                         BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1"
                         Padding="14,8">
-                    <TextBox Theme="{StaticResource InputBox}" Watermark="🔍  Search tasks..."
+                    <TextBox x:Name="TaskSearchBox"
+                             Theme="{StaticResource InputBox}" Watermark="🔍  Search tasks..."
                              Text="{Binding TaskSearch}"/>
                 </Border>
 
@@ -460,6 +470,7 @@
                             <DataTemplate DataType="vm:TaskItemViewModel">
                                 <Border Theme="{StaticResource TaskCard}"
                                         Background="{Binding IsActive, Converter={StaticResource ActiveBgConv}}"
+                                        Classes.selectedTask="{Binding IsSelected}"
                                         Padding="0">
                                     <Grid>
                                         <!-- Left colour strip -->
@@ -478,10 +489,12 @@
                                             <CheckBox Grid.Column="0" IsChecked="{Binding IsCompleted, Mode=OneWay}"
                                                       Theme="{StaticResource CheckmarkBox}"
                                                       VerticalAlignment="Top" Margin="0,3,8,0"
+                                                      ToolTip.Tip="Mark as done"
                                                       Click="Checkbox_Click"/>
                                             <ToggleButton Grid.Column="1" Theme="{StaticResource ActiveToggleSwitch}"
                                                           IsChecked="{Binding IsActive, Mode=OneWay}"
                                                           Click="ActiveToggle_Click"
+                                                          ToolTip.Tip="Start or stop the timer"
                                                           VerticalAlignment="Top" Margin="0,3,10,0"/>
                                             <StackPanel Grid.Column="2" Cursor="Hand"
                                                         PointerReleased="TaskContent_Click">
@@ -530,7 +543,7 @@
                                                         <Button.IsVisible>
                                                             <MultiBinding Converter="{x:Static BoolConverters.Or}">
                                                                 <Binding Path="IsDescriptionExpanded"/>
-                                                                <Binding ElementName="TaskDescriptionText" Path="(beh:TextOverflow.IsTrimmed)"/>
+                                                                <CompiledBinding Path="#TaskDescriptionText.(beh:TextOverflow.IsTrimmed)"/>
                                                             </MultiBinding>
                                                         </Button.IsVisible>
                                                     </Button>
@@ -554,6 +567,10 @@
                                                 <Button Theme="{StaticResource IconButton}" ToolTip.Tip="Attachments"
                                                         Click="Attachment_Click" Margin="0,0,1,0">
                                                     <TextBlock Text="&#x1F4CE;" FontSize="13" Foreground="#60A5FA"/>
+                                                </Button>
+                                                <Button Theme="{StaticResource IconButton}" ToolTip.Tip="Postpone (tomorrow or next week)"
+                                                        Click="Postpone_Click" Margin="0,0,1,0">
+                                                    <TextBlock Text="&#x23ED;" FontSize="13" Foreground="#34D399"/>
                                                 </Button>
                                                 <Button Theme="{StaticResource IconButton}" ToolTip.Tip="Edit"
                                                         Click="Edit_Click" Margin="0,0,1,0">
@@ -805,7 +822,7 @@
                                                 <TextBlock Text="&#x22EF;" FontSize="16" FontWeight="Bold" LineHeight="14"
                                                            Foreground="{DynamicResource TextSecondary}"
                                                            ToolTip.Tip="Open the note to see all of it"
-                                                           IsVisible="{Binding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
+                                                           IsVisible="{CompiledBinding #NoteDescriptionText.(beh:TextOverflow.IsTrimmed)}"/>
                                                 <!-- Tag chips (only rendered when there are tags) -->
                                                 <ItemsControl ItemsSource="{Binding TagList}" Margin="0,5,0,0"
                                                               IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -834,6 +851,7 @@
                                                 </TextBlock>
                                             </StackPanel>
                                             <Button Grid.Column="1" Theme="{StaticResource IconButton}"
+                                                    ToolTip.Tip="Delete note"
                                                     VerticalAlignment="Center" Click="DeleteNote_Click">
                                                 <TextBlock Text="&#x1F5D1;" FontSize="14" Foreground="#F87171"/>
                                             </Button>
@@ -1359,6 +1377,19 @@
                                                  Theme="{StaticResource FilterChip}" Content="⚡  Auto"
                                                  Click="ThemeSetting_Click" Tag="auto"/>
                                 </StackPanel>
+                                <TextBlock Text="Text size" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,6"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="TextSizeNormal" GroupName="TextSize"
+                                                 Theme="{StaticResource FilterChip}" Content="Normal"
+                                                 Margin="0,0,6,0" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Normal}"/>
+                                    <RadioButton x:Name="TextSizeLarge" GroupName="TextSize"
+                                                 Theme="{StaticResource FilterChip}" Content="Large"
+                                                 Margin="0,0,6,0" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Large}"/>
+                                    <RadioButton x:Name="TextSizeLarger" GroupName="TextSize"
+                                                 Theme="{StaticResource FilterChip}" Content="Larger"
+                                                 Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Larger}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -1460,6 +1491,7 @@
                             </StackPanel>
                             <ToggleButton Grid.Column="1"
                                           x:Name="CompletionPopupToggle"
+                                          AutomationProperties.Name="Show completion popup"
                                           Theme="{StaticResource ActiveToggleSwitch}"
                                           VerticalAlignment="Center"
                                           Click="CompletionPopupToggle_Click"/>
@@ -1480,10 +1512,23 @@
                             </StackPanel>
                             <ToggleButton Grid.Column="1"
                                           x:Name="SaveScreenshotToggle"
+                                          AutomationProperties.Name="Save screenshot to Desktop"
                                           Theme="{StaticResource ActiveToggleSwitch}"
                                           VerticalAlignment="Center"
                                           Click="SaveScreenshotToggle_Click"/>
                         </Grid>
+                    </Border>
+
+                    <!-- ROW 4: Keyboard shortcuts (same list as the "?" sheet and the first-start tips) -->
+                    <TextBlock Text="KEYBOARD SHORTCUTS" Theme="{StaticResource LabelText}" Margin="0,0,0,6"/>
+                    <Border Theme="{StaticResource TaskCard}" Padding="14,12" Margin="0,0,0,14">
+                        <StackPanel>
+                            <ctrl:ShortcutList/>
+                            <Button Theme="{StaticResource SecondaryButton}" HorizontalAlignment="Left"
+                                    Padding="12,6" Margin="0,6,0,0" Click="ShowWelcomeTips_Click">
+                                <TextBlock Text="Show the first-start tips again" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                     </Border>
 
                     <!-- ROW 5: Data / Recycle Bin + Meeting History -->
@@ -1538,6 +1583,138 @@
                                 <TextBlock Text="Open" FontSize="12"/>
                             </Button>
                         </Grid>
+                    </Border>
+
+                    <!-- Automatic daily backups -->
+                    <Border Theme="{StaticResource TaskCard}" Padding="14,11" Margin="0,8,0,0">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Column="0" Text="&#x1F6DF;" FontSize="16"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Backups" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <TextBlock x:Name="BackupStatusText" Theme="{StaticResource SubText}"
+                                               TextWrapping="Wrap" Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                                <ComboBox x:Name="BackupPicker" Grid.Column="0" Theme="{StaticResource ThemedComboBox}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          PlaceholderText="No backups yet"/>
+                                <Button Grid.Column="1" Theme="{StaticResource SecondaryButton}"
+                                        Padding="12,6" Margin="8,0,0,0" Click="RestoreBackup_Click"
+                                        IsEnabled="{Binding #BackupPicker.SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <TextBlock Text="Restore…" FontSize="12"/>
+                                </Button>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                        Click="BackUpNow_Click">
+                                    <TextBlock Text="Back up now" FontSize="12"/>
+                                </Button>
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6"
+                                        Click="OpenBackupFolder_Click">
+                                    <TextBlock Text="Open backup folder" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Export / import for spreadsheets and other apps -->
+                    <Border Theme="{StaticResource TaskCard}" Padding="14,11" Margin="0,8,0,0">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Column="0" Text="&#x1F4E4;" FontSize="16"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Export and import" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <TextBlock Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,1,0,0"
+                                               Text="CSV opens in Excel, Numbers or Google Sheets. Import a CSV from a spreadsheet, Todoist or another app: it needs a Title column."/>
+                                </StackPanel>
+                            </Grid>
+                            <WrapPanel Margin="0,10,0,0">
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="0,0,8,6"
+                                        Click="ExportCsv_Click">
+                                    <TextBlock Text="Export tasks (CSV)" FontSize="12"/>
+                                </Button>
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="0,0,8,6"
+                                        Click="ExportMarkdown_Click">
+                                    <TextBlock Text="Export tasks and notes (Markdown)" FontSize="12"/>
+                                </Button>
+                                <Button Theme="{StaticResource PrimaryButton}" Padding="12,6" Margin="0,0,8,6"
+                                        Click="ImportCsv_Click">
+                                    <TextBlock Text="Import tasks (CSV)…" FontSize="12"/>
+                                </Button>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Print or save as PDF -->
+                    <Border Theme="{StaticResource TaskCard}" Padding="14,11" Margin="0,8,0,0">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Column="0" Text="&#x1F5A8;" FontSize="16"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Print or save as PDF" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <TextBlock Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,1,0,0"
+                                               Text="Opens a printable list in your browser. Choose a printer, or &quot;Save as PDF&quot;."/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                        Click="Print_Click" Tag="{x:Static vm:TaskFilter.Today}">
+                                    <TextBlock Text="Today" FontSize="12"/>
+                                </Button>
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="0,0,8,0"
+                                        Click="Print_Click" Tag="{x:Static vm:TaskFilter.ThisWeek}">
+                                    <TextBlock Text="This week" FontSize="12"/>
+                                </Button>
+                                <Button Theme="{StaticResource SecondaryButton}" Padding="12,6"
+                                        Click="Print_Click" Tag="{x:Static vm:TaskFilter.All}">
+                                    <TextBlock Text="All open tasks" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ROW 6: Updates (off unless the user turns it on) -->
+                    <TextBlock Text="UPDATES" Theme="{StaticResource LabelText}" Margin="0,14,0,6"/>
+                    <Border Theme="{StaticResource TaskCard}" Padding="14,12" Margin="0,0,0,4">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Check for updates once a day"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <TextBlock Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="Asks GitHub for the newest version number. Nothing about you or your tasks is sent. Off: Tasky never goes online."/>
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1" x:Name="CheckUpdatesToggle"
+                                              AutomationProperties.Name="Check for updates once a day"
+                                              Theme="{StaticResource ActiveToggleSwitch}"
+                                              VerticalAlignment="Center" Margin="10,0,0,0"
+                                              Click="CheckUpdatesToggle_Click"/>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                                <TextBlock x:Name="UpdateStatusText" Grid.Column="0" Theme="{StaticResource SubText}"
+                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="DownloadUpdateBtn" Theme="{StaticResource PrimaryButton}"
+                                            Padding="12,6" Margin="8,0,0,0" IsVisible="False"
+                                            Click="DownloadUpdate_Click">
+                                        <TextBlock Text="Download" FontSize="12"/>
+                                    </Button>
+                                    <Button Theme="{StaticResource SecondaryButton}" Padding="12,6" Margin="8,0,0,0"
+                                            Click="CheckUpdatesNow_Click">
+                                        <TextBlock Text="Check now" FontSize="12"/>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
                     </Border>
 
                 </StackPanel>
@@ -1634,20 +1811,27 @@
             <Border x:Name="NotifMainBorder"
                     Background="#1F2937"
                     CornerRadius="10" Padding="0"
-                    MinWidth="280" MaxWidth="380">
+                    MinWidth="280" MaxWidth="420">
                 <Border.Effect>
                     <DropShadowDirectionEffect BlurRadius="18" ShadowDepth="4" Opacity="0.3" Color="#000"/>
                 </Border.Effect>
                 <Grid>
                     <Border x:Name="NotifAccent" Width="4" HorizontalAlignment="Left"
                             CornerRadius="10,0,0,10" Background="#22C55E"/>
-                    <StackPanel Orientation="Horizontal" Margin="16,12,16,12">
+                    <StackPanel Orientation="Horizontal" Margin="16,12,12,12">
                         <TextBlock x:Name="NotifIcon" FontSize="16"
                                    VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <TextBlock x:Name="NotifMessage"
                                    Foreground="White" FontSize="12"
                                    TextWrapping="Wrap" VerticalAlignment="Center"
                                    MaxWidth="300"/>
+                        <!-- Optional action such as "Undo" (the overlay only takes clicks while it is shown) -->
+                        <Button x:Name="NotifActionBtn" IsVisible="False"
+                                Theme="{StaticResource PlainButton}" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0"
+                                Padding="10,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Foreground="#93C5FD" FontSize="12" FontWeight="SemiBold"
+                                Click="NotifAction_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -1658,4 +1842,5 @@
                 ZIndex="1000"/>
 
     </Grid>
+    </LayoutTransformControl>
 </Window>

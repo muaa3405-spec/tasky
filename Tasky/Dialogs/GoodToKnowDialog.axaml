@@ -1,0 +1,57 @@
+<!-- First-start tips plus the keyboard shortcut list; "?" opens it with the shortcuts only -->
+<Window x:Class="Tasky.Dialogs.GoodToKnowDialog"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="using:Tasky.Controls"
+        Title="Good to know"
+        Background="{DynamicResource AppBackground}"
+        Width="460" SizeToContent="Height"
+        SystemDecorations="None" TransparencyLevelHint="Transparent"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        PointerPressed="Window_PointerPressed">
+
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource BorderColor}"
+            BorderThickness="1" CornerRadius="12"
+            Padding="26,22">
+        <Border.Effect>
+            <DropShadowDirectionEffect BlurRadius="24" ShadowDepth="6" Opacity="0.3" Color="#000"/>
+        </Border.Effect>
+
+        <StackPanel>
+            <TextBlock x:Name="TitleLabel" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+            <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Tips: only on the first start -->
+                    <ItemsControl x:Name="TipsList" Margin="0,0,0,10">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Grid ColumnDefinitions="18,*" Margin="0,0,0,8">
+                                    <TextBlock Grid.Column="0" Text="&#x2022;" FontSize="13"
+                                               Foreground="{DynamicResource PrimaryBlue}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding}" FontSize="13" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="KEYBOARD SHORTCUTS" Theme="{StaticResource LabelText}" Margin="0,0,0,8"/>
+                    <ctrl:ShortcutList/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <TextBlock Text="You can find this list any time in Settings, or by pressing ?"
+                       Theme="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,12,0,16"/>
+
+            <Button Content="Got it" Theme="{StaticResource PrimaryButton}"
+                    HorizontalAlignment="Right" MinWidth="100"
+                    IsDefault="True" IsCancel="True"
+                    Click="Close_Click"/>
+        </StackPanel>
+    </Border>
+</Window>

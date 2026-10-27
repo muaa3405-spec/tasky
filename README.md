@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20%7C%20macOS%2012%2B-0078D6">
-  <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-22C55E">
   <img alt="Offline" src="https://img.shields.io/badge/works-100%25%20offline-F59E0B">
 </p>
@@ -35,8 +35,8 @@ they hold your data. Tasky takes the opposite approach:
 
 - 🔒 **Private by design.** Everything is stored in a local database on your own computer.
   No telemetry, no analytics, no servers.
-- 📴 **No internet needed.** Tasky never connects to the internet. It works on a
-  plane, behind a firewall, anywhere.
+- 📴 **No internet needed.** Tasky never connects to the internet unless you switch on the
+  optional update check. It works on a plane, behind a firewall, anywhere.
 - 🧍 **Not just for projects.** Use it for your own life: daily routines,
   reminders, learning goals, side projects, chores.
 - 📈 **For personal improvement.** Tasky tracks time spent and tasks completed so you
@@ -53,8 +53,15 @@ they hold your data. Tasky takes the opposite approach:
 - **Today / This Week / All** views, plus instant search by title, number or description
 - **Recurring tasks**: daily, weekly or monthly; the next one is created when you finish the current one
 - **Drag and drop** to reorder your list
+- **Postpone** a task to tomorrow or next week with one click (⏭)
+- **Undo**: completing, deleting or postponing shows an Undo button; **Ctrl + Z** (macOS: **⌘ Z**) works too
 - **Recycle bin**: deleted tasks can be restored for 30 days
 - Overdue tasks are highlighted in red, so nothing slips quietly
+
+### ⌨ Keyboard shortcuts
+- Work without the mouse: **N** new task, **/** search, **↑ ↓** pick a task, **Space** done,
+  **E** edit, **T** timer, **P** / **Shift + P** postpone, **Delete** to the bin, **1 2 3** switch views
+- Press **?** for the full list. It is also in Settings, and shown in the "Good to know" tips on the first start
 
 ### ⏱ Time tracking
 - **One toggle** starts the timer on a task, and pause/resume is one click
@@ -100,17 +107,32 @@ they hold your data. Tasky takes the opposite approach:
   as if you had never switched computers
 - No cloud, no account: the file goes wherever *you* put it
 
+### 🛟 Your data is safe
+- **Automatic daily backups** of your tasks, notes and settings; the last 14 days are kept.
+  **Settings → Backups** puts an earlier day back (your current data is kept as a safety copy first)
+- If Tasky ever can't start, it shows what went wrong and offers to **restore the latest backup**,
+  instead of silently closing
+- Every build is tested by opening every page with sample data before an installer is made
+
+### 📤 Export, import and print
+- **Export to CSV** (Excel, Numbers, Google Sheets) or **Markdown** (Obsidian, Notion, GitHub)
+- **Import tasks from CSV**: your own spreadsheet, a Tasky export, or another app such as Todoist.
+  Only a Title column is needed; groups are created for you
+- **Print or save as PDF**: today's list, this week's, or all open tasks
+
 ### 🎉 Small things that make it nice
 - A celebration with confetti when you finish a task, plus a shareable "completed" banner
   (saved to your Desktop and copied to the clipboard)
 - **Dark and light themes** that follow your Windows or macOS setting automatically
+- **Larger text** option (Settings → Appearance), and screen-reader names on every icon button
+- Optional **update check** (off by default): one anonymous request to GitHub once a day, nothing about you is sent
 - Lives quietly in the **system tray**, and opening it again just brings the window forward
 
 ## Getting started
 
 ### Requirements
 - Windows 10 version 2004 (build 19041) or later, 64-bit
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build from source
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) to build from source
 
 ### Build and run
 
@@ -134,7 +156,7 @@ See [BUILD.md](BUILD.md) for building the installer with Inno Setup.
 ## Where your data lives
 
 Everything stays inside your user profile. Nothing is ever uploaded. On macOS the same files live in
-`~/Library/Application Support/Tasky/` (logs and safety copies in `~/Library/Application Support/Tasky Local/`).
+`~/Library/Application Support/Tasky/` (logs, backups and safety copies in `~/Library/Application Support/Tasky Local/`).
 
 | What | Location |
 |------|----------|
@@ -142,11 +164,13 @@ Everything stays inside your user profile. Nothing is ever uploaded. On macOS th
 | Task attachments | `%AppData%\Tasky\Attachments\<task id>\` |
 | Note attachments | `%AppData%\Tasky\Attachments\notes\<note id>\` |
 | Settings | `%AppData%\Tasky\settings.json` |
+| Daily backups (database and settings, last 14) | `%LocalAppData%\Tasky\backups\` |
 | Error logs | `%LocalAppData%\Tasky\logs\` |
-| Safety copy made before an import | `%LocalAppData%\Tasky\before-import\` |
+| Safety copy made before an import or a restore | `%LocalAppData%\Tasky\before-import\` |
 
 These folders are readable only by your user account (and administrators).
-**Remove all data** by deleting `%AppData%\Tasky`.
+Uninstalling Tasky does not remove them. **Remove all data** by deleting `%AppData%\Tasky`
+and `%LocalAppData%\Tasky`.
 
 ### What gets recorded on your PC
 
@@ -188,6 +212,32 @@ Ideas, bug reports and pull requests are welcome.
 
 Please don't commit build output, your database or personal settings
 (`.gitignore` already excludes them).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The Windows installer is built from this repository's source by GitHub Actions
+([build-installers.yml](.github/workflows/build-installers.yml)) and sent to SignPath for signing.
+Only releases are signed, and each one is approved by hand first.
+
+| Role | Members |
+|------|---------|
+| Committers and reviewers | [Muhammad Aadil](https://github.com/muaa3405-spec) |
+| Approvers | [Muhammad Aadil](https://github.com/muaa3405-spec) |
+
+Changes from anyone outside the team arrive as pull requests and are reviewed before they are merged.
+
+## Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it.
+
+The one feature that goes online is the **update check**, which is off until you switch it on in
+Settings → Updates. It then asks GitHub's public API for the latest release number once a day; the
+request contains no information about you, your computer or your tasks. Everything else, including
+tasks, notes, time tracking, app usage and meeting detection, stays in the local folders listed
+under [Where your data lives](#where-your-data-lives).
 
 ## License
 

@@ -6,13 +6,13 @@
 #define AppName      "Tasky"
 ; The build passes the project version with /DAppVersion=...; this is the fallback
 #ifndef AppVersion
-  #define AppVersion "1.1.1"
+  #define AppVersion "1.2.0"
 #endif
 #define AppPublisher "Muhammad Aadil"
 #define AppURL       "https://github.com/muaa3405-spec/tasky"
 #define AppExeName   "Tasky.exe"
 ; Path to the published output of  dotnet publish -c Release -r win-x64 -o <PublishDir>
-#define PublishDir   "..\Tasky\bin\Release\net8.0\win-x64\publish"
+#define PublishDir   "..\Tasky\bin\Release\net10.0\win-x64\publish"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
@@ -22,6 +22,13 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
 AppUpdatesURL={#AppURL}
+; File properties of TaskySetup.exe; code signing (SignPath) checks the product name
+VersionInfoVersion={#AppVersion}
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoCompany={#AppPublisher}
+VersionInfoDescription={#AppName} Setup
+VersionInfoCopyright=Copyright (C) 2026 {#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -49,7 +56,7 @@ Name: "startupentry";   Description: "Start Tasky with Windows";  GroupDescripti
 [Files]
 ; Publish the entire self-contained folder
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Copy the icon file explicitly Ã¢â‚¬â€ in a self-contained .NET 8 publish the .ico is
+; Copy the icon file explicitly Ã¢â‚¬â€ in a self-contained .NET publish the .ico is
 ; compiled into the exe as a resource and is NOT present as a loose file in the
 ; publish folder, so shortcuts cannot extract it from {app}\Tasky.exe reliably.
 Source: "..\Tasky\Assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
