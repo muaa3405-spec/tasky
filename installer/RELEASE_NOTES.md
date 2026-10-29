@@ -30,4 +30,5 @@ Install it over your current Tasky: your tasks, notes and attachments are kept.
 
 ### Improved
 - Every build is now tested on Windows and macOS by opening every page with sample tasks and notes, so a problem like the 1.1.1 start-up crash can't reach an installer again.
+- The Windows installer now carries its product name, version and publisher in its file properties.
 - Tasky now runs on **.NET 10**, Microsoft's current long-term support version (.NET 8 support ends in November 2026).
