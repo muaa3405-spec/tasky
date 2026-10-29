@@ -761,8 +761,10 @@
     </ControlTheme>
 
     <!-- ── ScrollViewer: the bar sits in its own column, as on Windows ─── -->
-    <!-- The wheel is handled by the ScrollContentPresenter, so it must be hit-testable everywhere:
-         a transparent Background, and Padding (not Margin) so gaps between cards and the edges still scroll. -->
+    <!-- The wheel is handled by the ScrollContentPresenter, so it has a transparent Background to scroll
+         over gaps between cards. Padding is a Margin: ScrollContentPresenter ignores its own Padding when
+         sizing, which clipped the group chips and pushed dialog content past the right edge.
+         Behaviors/ScrollPaddingWheel scrolls when the pointer is over that margin strip. -->
     <ControlTheme x:Key="{x:Type ScrollViewer}" TargetType="ScrollViewer">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="AllowAutoHide" Value="False"/>
@@ -773,7 +775,7 @@
                     <ScrollContentPresenter Name="PART_ContentPresenter"
                                             Grid.Row="0" Grid.Column="0"
                                             Background="Transparent"
-                                            Padding="{TemplateBinding Padding}"
+                                            Margin="{TemplateBinding Padding}"
                                             ScrollViewer.IsScrollInertiaEnabled="{TemplateBinding IsScrollInertiaEnabled}"
                                             HorizontalSnapPointsType="{TemplateBinding HorizontalSnapPointsType}"
                                             VerticalSnapPointsType="{TemplateBinding VerticalSnapPointsType}"

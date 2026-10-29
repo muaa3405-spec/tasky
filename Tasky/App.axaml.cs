@@ -124,6 +124,7 @@ public partial class App : Application
         AppUsage.Start();
 
         AccessibleNames.Register();
+        ScrollPaddingWheel.Register();
 
         var mainWindow = new MainWindow { DataContext = ViewModel };
         MainAppWindow = mainWindow;
