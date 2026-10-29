@@ -1,19 +1,20 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <SolidColorBrush x:Key="AppBackground"      Color="#F9FAFB"/>
-    <SolidColorBrush x:Key="CardBackground"     Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="HeaderBackground"   Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="BorderColor"        Color="#E5E7EB"/>
-    <SolidColorBrush x:Key="TextPrimary"        Color="#111827"/>
-    <SolidColorBrush x:Key="TextSecondary"      Color="#6B7280"/>
-    <SolidColorBrush x:Key="PlaceholderColor"   Color="#9CA3AF"/>
-    <SolidColorBrush x:Key="InputBackground"    Color="#FFFFFF"/>
+    <!-- "Silk ivory": warm off-whites instead of pure white, easier on the eyes -->
+    <SolidColorBrush x:Key="AppBackground"      Color="#F6F3EE"/>
+    <SolidColorBrush x:Key="CardBackground"     Color="#FBF9F5"/>
+    <SolidColorBrush x:Key="HeaderBackground"   Color="#FBF9F5"/>
+    <SolidColorBrush x:Key="BorderColor"        Color="#E6E0D6"/>
+    <SolidColorBrush x:Key="TextPrimary"        Color="#1F1B16"/>
+    <SolidColorBrush x:Key="TextSecondary"      Color="#6E665C"/>
+    <SolidColorBrush x:Key="PlaceholderColor"   Color="#A39A8E"/>
+    <SolidColorBrush x:Key="InputBackground"    Color="#FFFDF9"/>
     <SolidColorBrush x:Key="PrimaryBlue"        Color="#3B82F6"/>
     <SolidColorBrush x:Key="AccentGreen"        Color="#22C55E"/>
-    <SolidColorBrush x:Key="TagBackground"      Color="#EFF6FF"/>
+    <SolidColorBrush x:Key="TagBackground"      Color="#EEF2FB"/>
     <SolidColorBrush x:Key="TagForeground"      Color="#3B82F6"/>
     <SolidColorBrush x:Key="ShadowColor"        Color="#000000"/>
     <SolidColorBrush x:Key="DialogFrameBorder"  Color="#3B82F6" Opacity="0.6"/>
-    <SolidColorBrush x:Key="CompletedOpacity"   Color="#6B7280"/>
-    <SolidColorBrush x:Key="CalendarDayTitle"   Color="#6B7280"/>
+    <SolidColorBrush x:Key="CompletedOpacity"   Color="#6E665C"/>
+    <SolidColorBrush x:Key="CalendarDayTitle"   Color="#6E665C"/>
 </ResourceDictionary>

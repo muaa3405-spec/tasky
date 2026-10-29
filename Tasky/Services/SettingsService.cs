@@ -1,12 +1,13 @@
 using System.IO;
 using System.Text.Json;
+using Tasky.Helpers;
 
 namespace Tasky.Services;
 
 public class AppSettings
 {
     public string  UserName              { get; set; } = string.Empty;
-    public string  Theme                 { get; set; } = "dark";
+    public string  Theme                 { get; set; } = ThemePreferences.Dark;
     public string  NotifTune             { get; set; } = "proximity";
     public string  NotifAccentColor      { get; set; } = "#60A5FA";
     public int     NotifAutoDismissSecs  { get; set; } = 30;

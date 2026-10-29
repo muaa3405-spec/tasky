@@ -17,6 +17,8 @@ Install it over your current Tasky: your tasks, notes and attachments are kept.
 [Code signing policy](https://github.com/muaa3405-spec/tasky#code-signing-policy) · [Privacy policy](https://github.com/muaa3405-spec/tasky#privacy-policy)
 
 ### Fixed
-- **Group filters were cut off** by the task search bar when you have groups. The group chips above the search bar are fully visible again.
-- **Note and task windows were too wide inside**: the description box and other fields ran past the right edge. They now fit inside the window with the same margin on both sides.
-- **Scrolling got stuck** on the Tasks, Notes, Settings, Stats and other pages whenever the mouse pointer was over the space between cards or near the edges. The mouse wheel and trackpad now scroll smoothly wherever the pointer is.
+- **Light theme now sticks.** If you chose Light (or Auto), Tasky started dark again the next time you opened it. Your theme choice is now applied as soon as Tasky starts, and the ☀️/🌙 button in the header is remembered too.
+- **Appearance buttons overflowed** at the Large and Larger text sizes. They now move to a new line when there isn't room.
+
+### Improved
+- **Softer light theme.** Pure white is replaced by warm, off-white "silk ivory" tones that are easier on the eyes.

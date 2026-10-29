@@ -9,7 +9,7 @@ namespace Tasky.Platform.Windows;
 internal sealed class WindowsWindowChrome : IWindowChrome
 {
     private const string DarkCaption  = "#111827";
-    private const string LightCaption = "#E5E7EB";
+    private const string LightCaption = "#EFEAE2";   // a shade darker than the ivory header
 
     public void ApplyTheme(Window window, bool dark)
     {

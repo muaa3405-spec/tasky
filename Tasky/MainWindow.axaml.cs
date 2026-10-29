@@ -488,10 +488,7 @@ public partial class MainWindow : Window
     private void ThemeToggle_Click(object? sender, RoutedEventArgs e)
     {
         var app = App.Instance;
-        app.ToggleTheme();
-        bool dark = app.IsDarkTheme;
-        SyncThemeIcons(dark);
-        ApplyTitleBarTheme(dark);
+        app.SetThemePreference(app.IsDarkTheme ? ThemePreferences.Light : ThemePreferences.Dark);
     }
 
     private void Completed_Click(object? sender, RoutedEventArgs e)  => NavigateTo(AppPage.Completed);
@@ -661,9 +658,9 @@ public partial class MainWindow : Window
         SettingUserName.Text = s.UserName;
 
         // Theme
-        ThemeDark.IsChecked  = s.Theme == "dark";
-        ThemeLight.IsChecked = s.Theme == "light";
-        ThemeAuto.IsChecked  = s.Theme == "auto";
+        ThemeDark.IsChecked  = s.Theme == ThemePreferences.Dark;
+        ThemeLight.IsChecked = s.Theme == ThemePreferences.Light;
+        ThemeAuto.IsChecked  = s.Theme == ThemePreferences.Auto;
 
         // Tune
         foreach (var item in SettingTune.Items.OfType<ComboBoxItem>())
@@ -696,15 +693,8 @@ public partial class MainWindow : Window
 
     private void ThemeSetting_Click(object? sender, RoutedEventArgs e)
     {
-        var tag = (sender as RadioButton)?.Tag?.ToString() ?? "dark";
-        App.Settings.Current.Theme = tag;
-        App.Settings.Save();
-        var app = App.Instance;
-        bool dark = tag == "dark" || (tag == "auto" && app.IsDarkTheme);
-        if (tag == "light") dark = false;
-        app.ApplyTheme(dark);
-        ApplyTitleBarTheme(dark);
-        SyncThemeIcons(dark);
+        var tag = (sender as RadioButton)?.Tag?.ToString() ?? ThemePreferences.Dark;
+        App.Instance.SetThemePreference(tag);
     }
 
     private string SelectedTuneTag => (SettingTune.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "notify";

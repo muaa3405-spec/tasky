@@ -6,6 +6,7 @@ using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Tasky.Behaviors;
+using Tasky.Helpers;
 using Tasky.Platform;
 using Tasky.Services;
 using Tasky.Services.Migration;
@@ -149,10 +150,10 @@ public partial class App : Application
             _ = mainWindow.CheckForUpdatesIfDueAsync();
         }
         mainWindow.Opened += OnFirstOpened;
-        mainWindow.Show();
 
-        // Initialize auto theme AFTER window is created
-        InitializeAutoTheme();
+        // Before Show, so the window never flashes the wrong theme
+        InitializeTheme();
+        mainWindow.Show();
     }
 
     /// <summary>Ends the app (tray "Exit Tasky", restart after an import).</summary>
@@ -243,45 +244,49 @@ public partial class App : Application
     // ─── Theme ────────────────────────────────────────────────────────────
 
     private bool _isDark = true;
-    private bool _userOverrodeTheme = false;
 
-    public void ToggleTheme()
+    public bool IsDarkTheme => _isDark;
+
+    /// <summary>Saves the Settings → Theme choice (dark, light or auto) and applies it.</summary>
+    public void SetThemePreference(string theme)
     {
-        _userOverrodeTheme = true;
-        _isDark = !_isDark;
-        ApplyTheme(_isDark);
+        Settings.Current.Theme = theme;
+        Settings.Save();
+        ApplyThemePreference();
     }
 
-    public void ApplyTheme(bool dark)
+    /// <summary>Applies the saved theme choice; "auto" follows the operating system.</summary>
+    private void ApplyThemePreference()
+    {
+        bool dark = Settings.Current.Theme switch
+        {
+            ThemePreferences.Light => false,
+            ThemePreferences.Auto  => ReadSystemIsDark(),
+            _                      => true,
+        };
+        ApplyTheme(dark);
+        MainAppWindow?.SyncThemeIcons(dark);
+        if (MainAppWindow is { IsVisible: true } window)
+            window.ApplyTitleBarThemePublic(dark);   // a window that isn't open yet does this when it opens
+    }
+
+    private void ApplyTheme(bool dark)
     {
         _isDark = dark;
         RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
         if (ViewModel is not null) ViewModel.IsDarkTheme = dark;
     }
 
-    public bool IsDarkTheme => _isDark;
-
-    private void InitializeAutoTheme()
+    private void InitializeTheme()
     {
-        bool systemDark = ReadSystemIsDark();
-        if (systemDark != _isDark)
-            ApplyTheme(systemDark);
-
+        ApplyThemePreference();
         if (PlatformSettings is { } settings) settings.ColorValuesChanged += OnSystemColorsChanged;
     }
 
     private void OnSystemColorsChanged(object? sender, PlatformColorValues e)
     {
-        if (_userOverrodeTheme) return;
-
-        bool systemDark = e.ThemeVariant == PlatformThemeVariant.Dark;
-        if (systemDark == _isDark) return;
-        Dispatcher.UIThread.Post(() =>
-        {
-            ApplyTheme(systemDark);
-            MainAppWindow?.SyncThemeIcons(systemDark);
-            MainAppWindow?.ApplyTitleBarThemePublic(systemDark);
-        });
+        if (Settings.Current.Theme != ThemePreferences.Auto) return;
+        Dispatcher.UIThread.Post(ApplyThemePreference);
     }
 
     /// <summary>The OS app-mode setting (Windows "Choose your app mode", macOS Appearance).</summary>

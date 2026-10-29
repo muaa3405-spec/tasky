@@ -1366,30 +1366,31 @@
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Theme" FontSize="11"
                                            Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,6"/>
-                                <StackPanel Orientation="Horizontal">
+                                <!-- WrapPanel: at larger text sizes the chips move to a new line instead of overflowing -->
+                                <WrapPanel>
                                     <RadioButton x:Name="ThemeDark"  GroupName="ThemeSetting"
                                                  Theme="{StaticResource FilterChip}" Content="🌙  Dark"
-                                                 Margin="0,0,6,0" Click="ThemeSetting_Click" Tag="dark"/>
+                                                 Margin="0,0,6,6" Click="ThemeSetting_Click" Tag="{x:Static helpers:ThemePreferences.Dark}"/>
                                     <RadioButton x:Name="ThemeLight" GroupName="ThemeSetting"
                                                  Theme="{StaticResource FilterChip}" Content="☀️  Light"
-                                                 Margin="0,0,6,0" Click="ThemeSetting_Click" Tag="light"/>
+                                                 Margin="0,0,6,6" Click="ThemeSetting_Click" Tag="{x:Static helpers:ThemePreferences.Light}"/>
                                     <RadioButton x:Name="ThemeAuto"  GroupName="ThemeSetting"
                                                  Theme="{StaticResource FilterChip}" Content="⚡  Auto"
-                                                 Click="ThemeSetting_Click" Tag="auto"/>
-                                </StackPanel>
+                                                 Margin="0,0,6,6" Click="ThemeSetting_Click" Tag="{x:Static helpers:ThemePreferences.Auto}"/>
+                                </WrapPanel>
                                 <TextBlock Text="Text size" FontSize="11"
-                                           Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,6"/>
-                                <StackPanel Orientation="Horizontal">
+                                           Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,6"/>
+                                <WrapPanel Margin="0,0,0,-6">
                                     <RadioButton x:Name="TextSizeNormal" GroupName="TextSize"
                                                  Theme="{StaticResource FilterChip}" Content="Normal"
-                                                 Margin="0,0,6,0" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Normal}"/>
+                                                 Margin="0,0,6,6" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Normal}"/>
                                     <RadioButton x:Name="TextSizeLarge" GroupName="TextSize"
                                                  Theme="{StaticResource FilterChip}" Content="Large"
-                                                 Margin="0,0,6,0" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Large}"/>
+                                                 Margin="0,0,6,6" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Large}"/>
                                     <RadioButton x:Name="TextSizeLarger" GroupName="TextSize"
                                                  Theme="{StaticResource FilterChip}" Content="Larger"
-                                                 Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Larger}"/>
-                                </StackPanel>
+                                                 Margin="0,0,6,6" Click="TextSize_Click" Tag="{x:Static helpers:TextSizes.Larger}"/>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
                     </Grid>
